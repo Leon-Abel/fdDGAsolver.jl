@@ -44,7 +44,7 @@ function Dyson!(
 end
 
 """
-    Dyson!(G, Σ, Gbare) :: Nothing  [nonlocal / lattice case, NL_MF_G]
+    Dyson!(G::NL_MF_G, Σ::NL_MF_G, Gbare::NL_MF_G,)::Nothing
  
 Applies the Dyson equation in-place for a **nonlocal** (momentum-resolved) Green's function
 defined on a fermionic Matsubara frequency mesh and a Brillouin-zone k-mesh.
@@ -64,7 +64,7 @@ function Dyson!(
 end
 
 """
-    compute_occupation(G :: MF_G) :: Float64
+    compute_occupation(G::MF_G)::Float64
  
 Computes the single-spin electron occupation ⟨n⟩ from the **local**
 Matsubara Green's function.
@@ -80,7 +80,7 @@ function compute_occupation(
 end
 
 """
-    compute_occupation(G :: NL_MF_G) :: Float64
+    compute_occupation(G::NL_MF_G)
  
 Computes the single-spin electron occupation ⟨n⟩ for the **nonlocal** (lattice) Green's
 function by averaging over the Brillouin zone.
@@ -92,7 +92,7 @@ function compute_occupation(G :: NL_MF_G)
 end
 
 """
-    compute_hubbard_chemical_potential(occ_target, Σ, hubbard_params) -> μ
+    compute_hubbard_chemical_potential(occ_target, Σ, hubbard_params)
  
 Finds the chemical potential μ for the Hubbard model such that the electron occupation
 matches a target value `occ_target` (per spin), given a fixed self-energy `Σ`.
