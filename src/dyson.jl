@@ -73,7 +73,7 @@ function compute_occupation(
     G :: MF_G
     ) :: Float64
     # ⟨n⟩ = T Σ_ν G(iν) e^{-iν0⁺} (from inverse fourier transform)
-    # he ½ offset comes from the asymptotic tail G(iν) ~ 1/(iν) for large ν;
+    # the ½ offset comes from the asymptotic tail G(iν) ~ 1/(iν) for large ν;
     # summing the full Green's function over a finite Matsubara grid gives a converged result 
     # only after adding this analytic contribution from the high-frequency tail.
     return 0.5 + imag(sum(G.data)) * temperature(meshes(G, Val(1)))
