@@ -741,7 +741,11 @@ function solve_using_mfRG_without_mixing!(
             x0 = flatten(S.F)
         end
 
-        krylov_solver = Krylov.DqgmresSolver(mfRGLinearMap(S, strategy), flatten(S.F), krylov_memory)
+        # OLD broken
+        # krylov_solver = Krylov.DqgmresSolver(mfRGLinearMap(S, strategy), flatten(S.F), krylov_memory)
+
+        # NEW
+        krylov_solver = Krylov.DqgmresWorkspace(mfRGLinearMap(S, strategy), flatten(S.F); memory = krylov_memory)
 
         res = nlsolve((R, x) -> fixed_point_preconditioned!(R, x, S, krylov_solver; update_Σ, strategy, occ_target, hubbard_params, filename_log, use_preconditioner, compute_Hartree, krylov_maxiter, callback_after_iterate), x0,
             method = :anderson,
