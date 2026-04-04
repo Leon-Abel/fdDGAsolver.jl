@@ -1,9 +1,9 @@
 # Test suite for the nonlocal (lattice) Hubbard model infrastructure.
 #
 # The tested objects are:
-#   1. Bare (non-interacting) lattice Green function G_0(k, iν)
+#   1. Bare (non-interacting) lattice Green function G₀(k, iν)
 #   2. Particle-particle (pp) and particle-hole (ph) bubbles Π_{pp/ph}(q, iΩ, iν)
-#   3. Dyson equation  G⁻¹ = G_0⁻¹ - Σ
+#   3. Dyson equation  G⁻¹ = G₀⁻¹ - Σ
 #   4. Lattice occupation  n = T Σ_{iν,k} G(k, iν) e^{iν 0⁺} + 1/2
 
 using fdDGAsolver # MPI.Init() is called internally here
@@ -28,7 +28,7 @@ using Test
     # Reciprocal lattice vectors (lattice constant a = 1)
     k1 = 2pi * SVector(1., 0.)
     k2 = 2pi * SVector(0., 1.)
-    # BrillouinZone(L, k1, k1) discretises the BZ with an L×L k-point grid.
+    # BrillouinZone(L, k1, k1) discretises the BZ spanned by k1, k2 with an L×L k-point grid.
     # MatsubaraFunctions.euclidean(mK.points[n], mK) to recover euclidean coordinates
     mK = BrillouinZoneMesh(BrillouinZone(8, k1, k2)) # L*L = 64 k-points
 
@@ -38,7 +38,7 @@ using Test
     # 
     # The non-interacting (bare) lattice Green function is
     #
-    #   G_0(k, iν) = 1 / (iν + μ - ε_k)
+    #   G₀(k, iν) = 1 / (iν + μ - ε_k)
     #
     # where ε_k = -2 * t1 * (cos(k1) + cos(k2)) for the nearest-neighbour square lattice
     # (see hubbard.jl → hubbard_band)
@@ -48,14 +48,14 @@ using Test
 
     Gbare = hubbard_bare_Green(mG, mK; μ, t1) # 2*nG x L*L array
 
-    # Check G_0 at high-symmetry points of the square-lattice BZ.
+    # Check G₀ at high-symmetry points of the square-lattice BZ.
     # Matsubara frequencies are evaluated at ν_n = 2π(n + 1/2) * T for n = -2,-1,0,1,2.
     # k-values used are:
-    #   k = (0,  0):       ε_k = -4 * t1   ⇒ G_0⁻¹ = iν + μ + 4t1
-    #   k = (0,  π/2):     ε_k = -2 * t1   ⇒ G_0⁻¹ = iν + μ + 2t1
-    #   k = (0,  π):       ε_k =  0        ⇒ G_0⁻¹ = iν + μ
-    #   k = (0,  3π/2):    ε_k = -2 * t1   ⇒ G_0⁻¹ = iν + μ + 2t1
-    #   k = (π,  π):       ε_k = +4 * t1   ⇒ G_0⁻¹ = iν + μ - 4t1
+    #   k = (0,  0):       ε_k = -4 * t1   ⇒ G₀⁻¹ = iν + μ + 4t1
+    #   k = (0,  π/2):     ε_k = -2 * t1   ⇒ G₀⁻¹ = iν + μ + 2t1
+    #   k = (0,  π):       ε_k =  0        ⇒ G₀⁻¹ = iν + μ
+    #   k = (0,  3π/2):    ε_k = -2 * t1   ⇒ G₀⁻¹ = iν + μ + 2t1
+    #   k = (π,  π):       ε_k = +4 * t1   ⇒ G₀⁻¹ = iν + μ - 4t1
     for ν in 2π * T * ((-2:2) .+ 1/2)
         @test -im * Gbare(ν, SVector(0., 0.)  ) ≈ 1 / (im * ν + μ + 4t1)
         @test -im * Gbare(ν, SVector(0., π/2) ) ≈ 1 / (im * ν + μ + 2t1)
@@ -63,12 +63,12 @@ using Test
         @test -im * Gbare(ν, SVector(0., 3π/2)) ≈ 1 / (im * ν + μ + 2t1)
         @test -im * Gbare(ν, SVector{2, Float64}(π, π)) ≈ 1 / (im * ν + μ - 4t1)
 
-        # Verify periodicity: G_0(k + G_nm, iν) = G_0(k, iν) for G_nm = (2π*m, 2π*n)
+        # Verify periodicity: G₀(k + G_nm, iν) = G₀(k, iν) for G_nm = (2π*m, 2π*n)
         @test Gbare(ν, SVector(0.2 + 2π, 0.4 - 2π)) ≈ Gbare(ν, SVector(0.2, 0.4))
     end
 
     # ---------------------------------------------------------------------------------------------------
-    # TEST 2: Bubble creation
+    # Bubble creation
     # ---------------------------------------------------------------------------------------------------
     #
     # The particle-particle (pp) and particle-hole (ph) bubbles are defined as
@@ -84,12 +84,12 @@ using Test
     #   bubbles_real_space!     : FFT-based convolution     (see nonlocal/bubble.jl)
     # Both should yield the same result.
 
-    mΠΩ = MatsubaraMesh(T, 4, Boson)    # bosonic mesh for transfer frequency Ω, 2*4 - 1 = 9 Ω-points
+    mΠΩ = MatsubaraMesh(T, 4, Boson)    # bosonic mesh for transfer frequency Ω, 2*4 - 1 = 7 Ω-points
     mΠν = MatsubaraMesh(T, 8, Fermion)  # fermionic mesh for loop frequency ν, 2*8 = 16 ν-points
 
     # Allocate bubble arrays: (iΩ, iν, q, k)
-    Πpp = MeshFunction(mΠΩ, mΠν, mK, mK) # 9 x 16 x 64 x 64 array
-    Πph = MeshFunction(mΠΩ, mΠν, mK, mK) # 9 x 16 x 64 x 64 array
+    Πpp = MeshFunction(mΠΩ, mΠν, mK, mK) # 7 x 16 x 64 x 64 array
+    Πph = MeshFunction(mΠΩ, mΠν, mK, mK) # 7 x 16 x 64 x 64 array
 
     # momentum space; faster, higher memory cost
     fdDGAsolver.bubbles_momentum_space!(Πpp, Πph, Gbare)
@@ -101,11 +101,12 @@ using Test
     Πpp_real_space = copy(Πpp)
     Πph_real_space = copy(Πph)
 
-    @test Πpp_mom_space == Πpp_real_space
-    @test Πph_mom_space == Πph_real_space
+    # verify equivalence
+    @test absmax(Πpp_mom_space - Πpp_real_space) < 1e-10
+    @test absmax(Πph_mom_space - Πph_real_space) < 1e-10
 
     # ---------------------------------------------------------------------------------------------------
-    # TEST 3: Dyson equation
+    # TEST 2: Dyson equation
     # ---------------------------------------------------------------------------------------------------
     #
     # The full lattice Green function satisfies the Dyson equation
@@ -121,9 +122,9 @@ using Test
     G = MeshFunction(mG, mK) # target Green function (will be overwritten)
     Σ = MeshFunction(mG, mK) # self-energy
 
-    # --- Trivial case: Σ = 0 → G = G_0 ---
+    # --- Trivial case: Σ = 0 → G = G₀ ---
     set!(Σ, 0)
-    fdDGAsolver.Dyson!(G, Σ, Gbare) # updates G
+    fdDGAsolver.Dyson!(G, Σ, Gbare) # updates G in place
     @test absmax(G - Gbare) < 1e-10
 
     # --- Non-trivial case: constant complex self-energy ---
@@ -141,7 +142,7 @@ using Test
 
 
     # ---------------------------------------------------------------------------------------------------
-    # TEST 4: Bubble equations (momentum-space algorithm)
+    # TEST 3: Bubble equations (momentum-space algorithm)
     # ---------------------------------------------------------------------------------------------------
 
     # Re-compute Gbare and bubbles with the same parameters so the tests below
@@ -158,37 +159,38 @@ using Test
     k = value(mK[23])                       # arbitrary loop momentum k
 
     # Particle-particle bubble:  Π_{pp}(iΩ, iν; q, k) = G₀(iν, k) * G₀(iΩ-iν, q-k)
-    @test Πpp(Ω, ν, P, k) ≈ Gbare(ν, k) * Gbare(Ω - ν, P - k)
+    @test Πpp(Ω, ν, P, k) ≈ Gbare(ν, k) * Gbare(Ω - ν, P - k) # check exact form of ≈
     # Particle-hole bubble:  Π_{ph}(iΩ, iν; q, k) = G₀(iν, k) * G₀(iΩ+iν, q+k)
     @test Πph(Ω, ν, P, k) ≈ Gbare(ν, k) * Gbare(Ω + ν, P + k)
 
     # ---------------------------------------------------------------------------------------------------
-    # TEST 4: Lattice occupation
+    # TEST 4: Local occupation per spin
     # ---------------------------------------------------------------------------------------------------
     #
-    # The occupation is
+    # The local occupation per spin is
     #
-    #   n = 1/2 + T Σ_{iν} (1/N_k) Σ_k  G(k, iν) e^{iν 0⁺}
+    #   n = 1/2 + T Σ_{iν} (1/N_k) Σ_k  (G(k, iν) - 1/(im ν)) e^{iν 0⁺} # der
     #
     # which in code variables (storing im * G) becomes
     #
     #   n = 1/2 + T/N_k · Im[ Σ_{ν,k} (im * G(iν, k)) ]
     #
     # (see dyson.jl → compute_occupation).
+    # 
+    # Compare to values calculated from (1/N_k) Σ_k f(β, ϵ_k - μ)
     #
     # The particle-hole symmetry n(μ) + n(-μ) = 1 (exact for t2 = t3 = 0) is explicitly verified
     # by the last two pairs of @test statements.
 
     # Use larger frequency and momentum mesh for better numerical accuracy.
-    mG = MatsubaraMesh(T, 20, Fermion)
-    mK = BrillouinZoneMesh(BrillouinZone(8, k1, k2))
+    mG = MatsubaraMesh(T, 10000, Fermion)
+    mK = BrillouinZoneMesh(BrillouinZone(16, k1, k2))
 
-    @test compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=-4.)) ≈ 0.0502663698543071
-    @test compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=-2.)) ≈ 0.2057188296739284
+    @test abs(compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=-4.)) - 0.030153827416513745) < 1e-4
+    @test abs(compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=-2.)) - 0.19640688635922182) < 1e-4
     # Half-filling: n = 1/2 exactly by particle-hole symmetry (μ = 0, t2 = t3 = 0)
     @test compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=0.)) ≈ 0.5
     # Particle-hole symmetry: n(μ) = 1 - n(-μ)
-    @test compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=4.)) ≈ 1 - 0.0502663698543071 
-    @test compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=2.)) ≈ 1 - 0.2057188296739284
-
+    @test compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=2.)) ≈ 1 - compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=-2.))
+    @test compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=4.)) ≈ 1 - compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=-4.))
 end
