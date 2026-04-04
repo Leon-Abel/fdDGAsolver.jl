@@ -31,6 +31,7 @@ function siam_bare_Green(
 
         # In the wide-band limit (D → ∞) the hybridization function becomes purely imaginary and
         # frequency-independent: Δ(iν) = -iΔ · sgn(ν)   →   iG₀(iν) = 1 / (ν + ie + Δ · sgn(ν))
+        # Δ ==Γ (spectral hybridization function)
         if D == Inf
             G0[ν] = 1 / (ν_value + im * e + Δ * sign(ν_value))
 
