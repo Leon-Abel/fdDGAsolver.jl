@@ -9,9 +9,10 @@ of freedom exactly (no interaction U), yielding the impurity Dyson equation:
 
     G₀(iν)⁻¹ = iν - e - Δ(iν)
  
-- `Δ` : Hybridization hybridization function encoding the coupling to the bath.
-- `e` : Impurity on-site energy. `e = 0` corresponds to particle-hole symmetry (half-filling)
-- `D` : Bandwidth. Use `D = Inf` for the wide-band limit; `D < Inf` for a finite box-shaped bath.
+- `Δ` : Hybridization function encoding the coupling to the bath.
+- `e` : Impurity on-site energy plus Hartree contribution of the self-energy, therefore 
+        `e = 0` corresponds to particle-hole symmetry (half-filling)
+- `D` : Half bandwidth. Use `D = Inf` for the wide-band limit; `D < Inf` for a finite box-shaped bath.
 """
 function siam_bare_Green(
     mesh :: FMesh,
