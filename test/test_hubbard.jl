@@ -169,25 +169,73 @@ using Test
     #
     # The local occupation per spin is
     #
-    #   n = 1/2 + T Σ_{iν} (1/N_k) Σ_k  (G(k, iν) - 1/(im ν)) e^{iν 0⁺} # der
+    #   n = 1/2 + T Σ_{iν} (1/N_k) Σ_k (G(k, iν) - 1/(iν)) e^{iν 0⁺}
     #
-    # which in code variables (storing im * G) becomes
+    # which in code variables (storing i * G) becomes
     #
-    #   n = 1/2 + T/N_k · Im[ Σ_{ν,k} (im * G(iν, k)) ]
+    #   n = 1/2 + T/N_k · Im[ Σ_{ν,k} (i * G(iν, k)) ]
     #
     # (see dyson.jl → compute_occupation).
-    # 
-    # Compare to values calculated from (1/N_k) Σ_k f(β, ϵ_k - μ)
     #
     # The particle-hole symmetry n(μ) + n(-μ) = 1 (exact for t2 = t3 = 0) is explicitly verified
     # by the last two pairs of @test statements.
 
-    # Use larger frequency and momentum mesh for better numerical accuracy.
-    mG = MatsubaraMesh(T, 10000, Fermion)
+    # number of grid points = N_ν ⇒ error = 1/N_ν:
+    #
+    #   n = 1/2 + T Σ_{iν} (1/N_k) Σ_k (G(k, iν) - 1/(iν)) 
+    #
+    # split sum into low (evaluated) and high (non-evaluated) frequency part:
+    #
+    #   n = 1/2 + (T/N_k) Σ_k [ Σ_{iν≤N_ν} (G(k, iν) - 1/(iν)) + Σ_{iν>N_ν} (G(k, iν) - 1/(iν)) ]
+    #     ≈ 1/2 + (T/N_k) Σ_k [ Σ_{iν≤N_ν} (1/(iν) + G^(1)/(iν)^2 - 1/(iν)) + G^(1) ∫_N_ν^∞ dν 1/(iν)^2 ]
+    #
+    # where the integral corresponding to the high frequency correction evaluates to 1/N_ν
+
+    # local occupation per spin calculated analytically from (1/N_k) Σ_k f(β, ϵ_k - μ)
+    """
+    function dispersion(t1::Float64, k::SVector{2, Float64}) → Float64
+
+    Dispersion relation of the Hubbard model on a 2D square lattice.
+    """
+    function dispersion(t1::Float64, k::SVector{2, Float64}) :: Float64
+        return -2 * t1 * (cos(k[1]) + cos(k[2]))
+    end 
+
+    """
+        function fermi_dirac(T::Float64, ϵ_k::Float64, μ::Float64) → Float64
+
+        Fermi-Dirac distribution
+    """
+    function fermi_dirac(T::Float64, ϵ_k::Float64, μ::Float64) :: Float64
+        return 1/(exp(1/T * (ϵ_k - μ)) + 1)
+    end
+
+    """
+        function occupation(mK, t1::Float64, T::Float64, μ::Float64) → Float64
+
+        Analytic expression for local occupation per spin of non-interaction Hubbard model.
+        <n> = 1/N Σ_k f(T, ϵ_k, μ)
+    """
+    function occupation(mK, t1::Float64, T::Float64, μ::Float64) :: Float64
+        n = 0
+
+        for i in mK.points
+            k   = euclidean(i, mK)
+            ϵ_k = dispersion(t1, k)
+            n += fermi_dirac(T, ϵ_k, μ)
+        end
+
+        return n/length(mK)
+    end
+
+    # number of gridpoints and corresponding error
+    N_ν = Int(1e6)
+    err = 1/N_ν
+    mG = MatsubaraMesh(T, N_ν, Fermion)
     mK = BrillouinZoneMesh(BrillouinZone(16, k1, k2))
 
-    @test abs(compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=-4.)) - 0.030153827416513745) < 1e-4
-    @test abs(compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=-2.)) - 0.19640688635922182) < 1e-4
+    @test abs(compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=-4.)) - occupation(mK, 1., T, -4.)) < err
+    @test abs(compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=-2.)) - occupation(mK, 1., T, -2.)) < err
     # Half-filling: n = 1/2 exactly by particle-hole symmetry (μ = 0, t2 = t3 = 0)
     @test compute_occupation(hubbard_bare_Green(mG, mK; t1=1., μ=0.)) ≈ 0.5
     # Particle-hole symmetry: n(μ) = 1 - n(-μ)
