@@ -30,7 +30,7 @@ using Test
     @test fdDGAsolver.numK3(γ) == numK3
 
     # Total number of frequencies across all three asymptotic classes.
-    # K1 lives on a bosonic mesh of 2*numK1 - 1 points.
+    # K1 lives on a bosonic mesh of     2*numK1 - 1    points.
     # K2 lives on a bosonic mesh of     2*numK2[1] - 1 points and
     #             a fermionic mesh of   2*numK2[2]     points.
     # K3 lives on a (bosonic) x (fermionic)^2 mesh.
@@ -129,7 +129,7 @@ using Test
 
     for νInf in [MatsubaraFrequency(T, 10^10, Fermion), fdDGAsolver.νInf]
 
-        # pick arbitrary in-bounds frequencies
+        # pick arbitrary in-bounds frequencies (inside the smallest K3 grid)
         Ω  = value(meshes(γ.K3, Val(1))[5])
         ν1 = value(meshes(γ.K3, Val(2))[3])
         ν2 = value(meshes(γ.K3, Val(3))[4])
