@@ -13,9 +13,9 @@ using Test
     # Physical and numerical parameters for constructing the Matsubara meshes
     # ---------------------------------------------------------------------------------------------------
     T = 0.5         # temperature 
-    numK1 = 10      # number of positive bosonic frequencies in the K1 mesh
-    numK2 = (5, 5)  # (number of positive bosonic, number of positive fermionic) frequencies for the K2 mesh
-    numK3 = (3, 3)  # (number of positive bosonic, number of positive fermionic) frequencies for the K3 mesh
+    numK1 = 32      # number of positive bosonic frequencies in the K1 mesh
+    numK2 = (16, 16)  # (number of positive bosonic, number of positive fermionic) frequencies for the K2 mesh
+    numK3 = (8, 8)  # (number of positive bosonic, number of positive fermionic) frequencies for the K3 mesh
 
     # ---------------------------------------------------------------------------------------------------
     # Number of frequencies
