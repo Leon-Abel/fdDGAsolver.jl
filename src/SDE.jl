@@ -1,3 +1,28 @@
+# SDE.jl — Schwinger–Dyson Equation (SDE) for the self-energy
+#
+# Implements the diagrammatic SDE that relates the 1PI self-energy Σ to the
+# full two-particle vertex F and the dressed propagator G via:
+#
+#   Σ(ν) = U*(n - 1/2) [Hartree]
+#          + U² * T² * Σ_{ω₁,ω₂} G(ω₁) G(ω₂) G(ω₁ - ω₂ + ν)  [2nd-order Fock]
+#          + T * Σ_Ω [ G(Ω-ν)*L_pp(Ω,ν) + G(Ω+ν)*L_ph(Ω,ν) ]  [γ-channel]
+#
+# where L_pp / L_ph are the particle-particle and particle-hole channel
+# "left parts" defined below, encoding the U * Π * γ skeleton diagrams.
+#
+# The asymptotic (multiboson) decomposition of F into channel contributions
+# γ_p (pp), γ_a, γ_t (ph) is used throughout; see Wentzell et al.,
+# J. Chem. Phys. 152, 044 (2020) and Krien et al., PRB 100, 155149 (2019).
+#
+# Conventions:
+#   - All frequencies are fermionic/bosonic Matsubara frequencies.
+#   - The self-energy is stored as im * Σ(ν); multiply by -im to recover Σ.
+#   - Bubble propagators Π_pp / Π_ph are pre-computed (see bubble.jl).
+#   - SymmetryGroup (SG*) objects apply symmetry reduction + parallelism.
+#   - Channels: pCh = particle-particle, aCh/tCh = particle-hole (antiparallel/transversal).
+#   - Spin: pSp = parallel spin component; crossing relations give xSp on the fly.
+
+
 # Define AbstractSolver interface
 
 function SDE!(S :: AbstractSolver; strategy = :scPA, include_U² = true, include_Hartree = true, subtract_asymptotic = false)
@@ -7,7 +32,6 @@ function SDE!(S :: AbstractSolver; strategy = :scPA, include_U² = true, include
         SDE!(S.Σ, S.G, S.Πpp, S.Πph, S.Lpp, S.Lph, S.F, S.SGΣ, S.SGpp[2], S.SGph[2]; include_U², include_Hartree, S.mode, subtract_asymptotic)
 
     elseif strategy == :fdPA || strategy == :fdPA_new || strategy == :fdPA_1loop
-        # We set include_Hartree to false because Hartree self-energy is included in S.Σ0
         # Σ = SDE(ΔΓ + Γ₀, Π, G)
         set!(S.Σ, 0)
         SDE!(S.Σ, S.G, S.Πpp, S.Πph, S.Lpp, S.Lph, S.F, S.SGΣ, S.SGpp[2], S.SGph[2]; include_U², include_Hartree, S.mode, subtract_asymptotic)
@@ -15,13 +39,6 @@ function SDE!(S :: AbstractSolver; strategy = :scPA, include_U² = true, include
         mult_add!(S.Σ, SDE!(copy(S.Σ)*0, S.G0, S.Π0pp, S.Π0ph, S.L0pp, S.L0ph, S.F0, S.SGΣ, S.SG0pp2, S.SG0ph2; include_U², include_Hartree, S.mode, subtract_asymptotic), -1)
         # #   + Σ₀
         add!(S.Σ, S.Σ0)
-
-        if include_Hartree
-            # SDE_compute! computes the Hartree self-energy with the occupation of G.
-            # Here we subtract the the Hartree self-energy for G0, so that we get G - G0.
-            n0 = compute_occupation(S.G0)
-            S.Σ.data .-= eltype(S.Σ.data)((n0 - 1/2) * bare_vertex(S.F) * im)
-        end
 
         # # Using K12
         # SDE_using_K12!(S)
