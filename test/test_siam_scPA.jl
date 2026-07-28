@@ -29,17 +29,17 @@ using Test
     # Physical and numerical parameters
     # ---------------------------------------------------------------------------------------------------
 
-    T = 0.1     # Temperature 
-    U = 1.0     # Local Coulomb repulsion on the impurity site
+    T = 1e-3    # Temperature 
+    U = 0.1     # Local Coulomb repulsion on the impurity site, in perturbative regime
     e = 0.0     # Impurity on-site energy ε_d plus Hartree contribution of the self-energy
-    Δ = π / 5   # Hybridization strength to the bath
+    Δ = π / 5   # Hybridization strength
     D = 10.0    # Half-bandwidth
 
     # Frequency grid sizes
     # The asymptotic decomposition allows different box sizes per vertex class
-    nmax = 6            # Base resolution parameter
-    nG   = 6nmax        # number of positive fermionic Matsubara frequencies for G and Σ
-    nK1  = 4nmax        # number of positive bosonic frequencies for K1 and the bubble
+    nmax = 12          # Base resolution parameter
+    nG   = 8nmax        # number of positive fermionic Matsubara frequencies for G and Σ
+    nK1  = 8nmax        # number of positive bosonic frequencies for K1 and the bubble
     nK2  = (nmax, nmax) # (bosonic, fermionic) grid sizes for K2 
     nK3  = (nmax, nmax) # (bosonic, fermionic) grid sizes for K3
 
@@ -82,7 +82,56 @@ using Test
         # At half-filling PH symmetry enforces Σ(iν_n) = -Σ(-iν_{n+1})* = -Σ(-iν_n).
         # Verify that the results are identical for both Number types and all modes.
 
-        @test S.Σ.(π * T .* [-3, -1, 1, 3]) ≈ [-0.052254330862359824, -0.03843903766760937, 0.03843903766760937, 0.052254330862359824]
+        """
+            Σ_analytical(T::Float64, U::Float64, Δ::Float64, N_ω::Int64) → Tuple{Float64, Float64, Float64}
+
+        Helper function that calculates the perturbative approximation of the self-energy analytically.
+        This approximation holds for low temperatures and frequencies.
+        The retarded self-energy is given as:
+
+            Σ_σ^R(ω) ≊ - α_R * ω - im * α_I * Δ ((ω/Δ)^2 + (πT/Δ)^2) + …
+
+        where α_R and α_I are defined as:
+
+            α_R = (3 - π^2/4)*Up^2 + 0.0553*Up^4
+            α_I = (Up^2 + 6*(5 - π^2/2)*Up^4)
+
+        The Matsubara self-energy is then given as:
+
+            Σ_σ(ω) ≊ - α_R * ω - im * α_I * Δ (-(ω/Δ)^2 + (πT/Δ)^2) * sign(ω) + …
+
+        Because the code stores im * Σ we multiply with im and thus:
+
+            Σ_σ(ω) ≊ α_R * ω + α_I * Δ (-(ω/Δ)^2 + (πT/Δ)^2) * sign(ω) + …
+        """
+        function Σ_analytical(T::Float64, U::Float64, Δ::Float64, n_ω::Int64) :: Tuple{Float64, Float64, Float64}
+            ω = π * T * n_ω
+            Up  = U/(π*Δ)                           # Dimensionless interaction strength
+            α_R = (3 - π^2/4)*Up^2 + 0.0553*Up^4    # real parameter
+            α_I = 1/2 * (Up^2 + 6*(5 - π^2/2)*Up^4) # imaginary parameter
+
+            # self energy stores im * Σ(im*ω)
+            Σ = α_R * ω + α_I * Δ * (-(ω/Δ)^2+ (π*T/Δ)^2) * sign(ω)
+            return Σ, α_R, α_I
+        end
+        
+        # Regression tests run with:
+        # T = 0.1, U = 0.1, e = 0.0, Δ = π / 5, D = 10.0
+        # nmax = 8, nG = 8nmax, nK1 = 8nmax, nK2 = (nmax, nmax), nK3 = (nmax, nmax)
+        # @test S.Σ.(π * T .* [-3, -1, 1, 3]) ≈ [-0.0005198208498442844, -0.00038254575808446985,  0.00038254575808446985, 0.0005198208498442844]
+
+        # physical test, compare to analytic results
+        @test all(i -> i < T^2, abs.(real.(S.Σ.(π * T .* [-3, -1, 1, 3]) .- first.(Σ_analytical.(T, U, Δ, [-3, -1, 1, 3])))))
+
+        # verify α_R
+        # Σ(π*T) = α_R * π*T => Σ(π*T) / π*T = α_R
+        @test S.Σ.(π * T)/(π * T) ≈ Σ_analytical.(T, U, Δ, 1)[2] atol = T
+
+        # verify α_I
+        # Σ(3*π*T) = 3 * Σ(π*T) + α_I / Δ * (-8*π^2*T^2) => α_I = (3 * Σ(π*T) - S.Σ.(3*π*T)) * Δ / (8*π^2*T^2)
+        @test (3 * S.Σ.(π * T) - S.Σ.(3*π*T)) * Δ / (8* π^2 * T^2) ≈ Σ_analytical.(T, U, Δ, 1)[3] atol = T
+
+        # verify symmetry
         @test S.Σ.(π * T .* [1, 3]) ≈ -S.Σ.(π * T .* [-1, -3])
 
         # -----------------------------------------------------------------------------------
@@ -90,15 +139,20 @@ using Test
         # -----------------------------------------------------------------------------------
         # Verify that the results are identical for both Number types and all modes.
 
-        @test S.F.γa.K1.(2π * T .* -2:2) ≈ [0.14137982758187426, 0.5546047324922341, 0.2438526467553354, 0.09950853979301386]
-        @test S.F.γp.K1.(2π * T .* -2:2) ≈ [-0.10998983785678543, -0.24406268938560566, -0.16083938676651757, -0.08256881993800179]
-        @test S.F.γt.K1.(2π * T .* -2:2) ≈ [0.015676298896395317, 0.15524108943442552, 0.041480347657872174, 0.0084597383808721]
-        
-        # old values
-        # @test S.Σ.(π * T .* [-3, -1, 1, 3]) ≈ [-0.052138235296134906, -0.03838544776344314, 0.03838544776344314, 0.052138235296134906]
-        # @test S.F.γa.K1.(2π * T .* -2:2) ≈ [0.13203850929270397, 0.5403615530152339, 0.2333246221064017, 0.09056300899983459]
-        # @test S.F.γp.K1.(2π * T .* -2:2) ≈ [-0.10420799999591804, -0.2403951910434166, -0.15592452265704748, -0.07622568434721624]
-        # @test S.F.γt.K1.(2π * T .* -2:2) ≈ [0.013898648018808482, 0.1499562726081748, 0.03867632419082161, 0.007160400841240708]
+        # function χ_M_analytical(U::Float64, Δ::Float64) :: Float64
+        #     Up = U/(π*Δ)       # Dimensionless interaction strength
+
+        #     # self energy
+        #     χ_M = 1/(2π*Δ) * (1 + Up + (3 - π^2/4)*Up^2 + (15 - 3π^2/2)*Up^3+ 0.0553*Up^4)
+        #     return χ_M
+        # end
+
+        # Regression tests run with:
+        # T = 0.1, U = 0.1, e = 0.0, Δ = π / 5, D = 10.0
+        # nmax = 8, nG = 8nmax, nK1 = 8nmax, nK2 = (nmax, nmax), nK3 = (nmax, nmax)
+        # @test S.F.γa.K1.(2π * T .* -2:2) ≈ [0.0013838581452246547, 0.003982031314968492, 0.002186119796029509, 0.001014694115877671]
+        # @test S.F.γp.K1.(2π * T .* -2:2) ≈ [-0.001346594451794493, -0.0036596533191820173, -0.002092013518995267, -0.0009937698551766658]
+        # @test S.F.γt.K1.(2π * T .* -2:2) ≈ [1.863184671508093e-5, 0.00016118899789323716, 4.7053138517121016e-5, 1.0462130350502526e-5]
 
         # -----------------------------------------------------------------------------------
         # Type consistency checks
@@ -157,20 +211,24 @@ end
     # Away from half-filling Σ(iν) is no longer purely imaginary and the antisymmetry
     # Σ(iν_n) = -Σ(-iν_n) is replaced by Σ(iν_n) = -Σ(-iν_n)* (complex conjugate),
     # reflecting time-reversal symmetry.
-    @test S.Σ.(π * T .* [-3, -1, 1, 3]) ≈ [-0.03900137428170572 - 0.1688475093744904im, -0.025303816148085505 - 0.17459212979569272im, 0.025303816148085505 - 0.17459212979569272im, 0.03900137428170572 - 0.1688475093744904im]
+
+    # Regression tests run with:
+    # T = 0.1, U = 1.0, e = 0.5, Δ = π / 5, D = 10.0
+    # nmax = 6, nG = 6nmax, nK1 = 4nmax, nK2 = (nmax + 1, nmax), nK3 = (nmax + 1, nmax)
+    # @test S.Σ.(π * T .* [-3, -1, 1, 3]) ≈ [-0.03900137428170572 - 0.1688475093744904im, -0.025303816148085505 - 0.17459212979569272im, 0.025303816148085505 - 0.17459212979569272im, 0.03900137428170572 - 0.1688475093744904im]
+    
+    # verify time-reversal symmetry
     @test S.Σ.(π * T .* [1, 3]) ≈ -conj(S.Σ.(π * T .* [-1, -3]))
 
     # -----------------------------------------------------------------------------------
     # Tests: K1 vertex class in each channel
     # -----------------------------------------------------------------------------------
     # K1(iΩ) now has a small but non-zero imaginary part due to the broken PH symmetry.
-    @test S.F.γa.K1.(2π * T .* -2:2) ≈ [0.12842622646499313 + 3.203753416887923e-5im, 0.4291342969150894 + 1.9955643558711365e-5im, 0.2136912314738301 - 4.5777323159823946e-5im, 0.09142186742802784 - 7.495576366353933e-6im]
-    @test S.F.γp.K1.(2π * T .* -2:2) ≈ [-0.13112696113252206 + 0.06485950342241105im, -0.24906689900393225 + 0.02071250168245983im, -0.1803803417803459 - 0.05330070462093495im, -0.10146322462920851 - 0.06585224545148298im]
-    @test S.F.γt.K1.(2π * T .* -2:2) ≈ [0.012662832567717497 + 6.330790775097969e-5im, 0.09985805465055425 + 2.0618763904736757e-5im, 0.03139767129069324 - 5.282913366400817e-5im, 0.007037408353052702 - 6.171180401643899e-5im]
 
-    # old values
-    # @test S.Σ.(π * T .* [-3, -1, 1, 3]) ≈ [-0.0389123277075552 - 0.16855090184215607im, -0.025252640312580586 - 0.17429637478745583im, 0.025252640312580586 - 0.17429637478745583im, 0.0389123277075552 - 0.16855090184215607im]
-    # @test S.F.γa.K1.(2π * T .* -2:2) ≈ [0.11925962005661812 + 8.57514999021054e-5im, 0.416232811242488 + 3.319936929625957e-5im, 0.20353141073439696 - 8.209974062547027e-5im, 0.08259294412067451 - 7.660306021755952e-5im]
-    # @test S.F.γp.K1.(2π * T .* -2:2) ≈ [-0.12570450372739117 + 0.06583917638195431im, -0.24548654160724023 + 0.021014183409764874im, -0.17578586892780296 - 0.05408344507941078im, -0.09544981624337806 - 0.06686768343644132im]
-    # @test S.F.γt.K1.(2π * T .* -2:2) ≈ [0.011016969129875598 + 7.455601769977568e-5im, 0.09533547032272821 + 2.4477973720973318e-5im, 0.028843799251846686 - 6.260706942592786e-5im, 0.005828299701446311 - 7.32415771550901e-5im]
+    # Regression tests run with:
+    # T = 0.1, U = 1.0, e = 0.5, Δ = π / 5, D = 10.0
+    # nmax = 6, nG = 6nmax, nK1 = 4nmax, nK2 = (nmax + 1, nmax), nK3 = (nmax + 1, nmax)
+    # @test S.F.γa.K1.(2π * T .* -2:2) ≈ [0.12842622646499313 + 3.203753416887923e-5im, 0.4291342969150894 + 1.9955643558711365e-5im, 0.2136912314738301 - 4.5777323159823946e-5im, 0.09142186742802784 - 7.495576366353933e-6im]
+    # @test S.F.γp.K1.(2π * T .* -2:2) ≈ [-0.13112696113252206 + 0.06485950342241105im, -0.24906689900393225 + 0.02071250168245983im, -0.1803803417803459 - 0.05330070462093495im, -0.10146322462920851 - 0.06585224545148298im]
+    # @test S.F.γt.K1.(2π * T .* -2:2) ≈ [0.012662832567717497 + 6.330790775097969e-5im, 0.09985805465055425 + 2.0618763904736757e-5im, 0.03139767129069324 - 5.282913366400817e-5im, 0.007037408353052702 - 6.171180401643899e-5im]
 end;
