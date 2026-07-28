@@ -53,9 +53,9 @@ struct aCh <: ChannelTag end
 # We define two spin components: parallel `pSp` and crossed `xSp`.
 # All vertices are stored in the parallel spin component, and the crossed component is computed
 # on the fly using the following crossing symmetry relations.
-# ``Γp{xSp}(Ω, ν, ω) = -Γp{pSp}(Ω, ν, Ω - ω) = -Γp{pSp}(Ω, Ω - ν, ω)``
-# ``Γt{xSp}(Ω, ν, ω) = -Γa{pSp}(Ω, ω, ν)``
-# ``Γa{xSp}(Ω, ν, ω) = -Γt{pSp}(Ω, ω, ν)``
+# ``Fp{xSp}(Ω, ν, ω) = -Fp{pSp}(Ω, ν, Ω - ω) = -Fp{pSp}(Ω, Ω - ν, ω)``
+# ``Ft{xSp}(Ω, ν, ω) = -Fa{pSp}(Ω, ω, ν)``
+# ``Fa{xSp}(Ω, ν, ω) = -Ft{pSp}(Ω, ω, ν)``
 
 # We also define the density `dSp` component, and use it to simplify some evaluations.
 # The density component is computed on the fly using the relation ``dSp = 2 * pSp + xSp``.
