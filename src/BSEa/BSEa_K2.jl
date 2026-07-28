@@ -23,7 +23,9 @@ function BSE_L_K2!(
         for i in eachindex(Π0slice)
             ω = value(meshes(Π0, Val(2))[i])
 
-            # vertices
+            # vertices; p for prime as F0 is already allocated
+            # F0 = false tells the evaluator to only look at the finite difference vertex and neglect
+            # the reference vertex --> corresponds to ~
             Γp  = F(Ω, ν, ω, Ch, Sp; F0 = false, γa = (Ch !== aCh), γp = (Ch !== pCh), γt = (Ch !== tCh))
             F0p = F0(Ω, _crossing(Ω, ω, Ch), νInf, Ch, Sp)
 
@@ -77,6 +79,7 @@ function BSE_K2!(
 
             else
                 # vertices
+                # FL = Φ~^(L)r
                 Fl  = F( Ω, ν,    ω, Ch, Sp) - F(Ω, νInf, ω, Ch, Sp)
                 F0r = F0(Ω, _crossing(Ω, ω, Ch), νInf, Ch, Sp)
                 FLr = FL(Ω, _crossing(Ω, ω, Ch), νInf, Ch, Sp)
