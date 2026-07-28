@@ -309,6 +309,17 @@ function bubbles!(S :: NL_ParquetSolver)
     # bubbles_momentum_space!(S)
 end
 
+function load_vertex!(F :: RefVertex, f, name)
+    # RefVertex is not an AbstractVertex; load its K3 mesh functions in place.
+    # U is fixed at construction and is not mutable, so it is left untouched.
+    G = load_refvertex(f, name)
+    set!(F.Fp_p, G.Fp_p)
+    set!(F.Fp_x, G.Fp_x)
+    set!(F.Ft_p, G.Ft_p)
+    set!(F.Ft_x, G.Ft_x)
+    return nothing
+end
+
 function load_vertex!(F :: AbstractVertex, f, name)
     if F isa Vertex
         set!(F, load_vertex(Vertex, f, name))
