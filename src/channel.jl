@@ -1,12 +1,14 @@
 # channel.jl
 #
-# Defines the asymptotic decomposition of the 2-particle reducible vertex γ_r in a single
+# Φ_r = γ_r (paper vs. code notation)
+#
+# Defines the asymptotic decomposition of the 2-particle reducible vertex Φ_r in a single
 # diagrammatic channel r ∈ {a, p, t} (antiparallel, parallel, transverse-antiparallel).
 #
-# The storage of γ_r is made tractable by the asymptotic (K1/K2/K3) decomposition,
-# which exploits the frequency decay of γ_r(Ω, ν, ν') as ν or ν' → ∞:
+# The storage of Φ_r is made tractable by the asymptotic (K1/K2/K3) decomposition,
+# which exploits the frequency decay of Φ_r(Ω, ν, ν') as ν or ν' → ∞:
 #
-#   γ_r(Ω, ν, ν') ≈ K1_r(Ω) + K2_r(Ω, ν) + K2'_r(Ω, ν') + K3_r(Ω, ν, ν')
+#   Φ_r(Ω, ν, ν') ≈ K1_r(Ω) + K2_r(Ω, ν) + K2'_r(Ω, ν') + K3_r(Ω, ν, ν')
 #
 # where K1 retains only the bosonic frequency Ω (transfer frequency), K2 and K2' add
 # one fermionic leg each, and K3 is the remainder carrying full (Ω, ν, ν') dependence.
