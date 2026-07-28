@@ -1,10 +1,61 @@
+# ParquetSolver.jl
+#
+# Implements the main solver type and associated utilities for the finite-difference
+# dynamical vertex approximation (fdDΓA) / parquet approximation.
+#
+# Spin structure: vertices are stored in the parallel spin component (pSp), and the
+# crossed component (xSp) is reconstructed on the fly via crossing symmetry.
+# The density component dSp = 2*pSp + xSp is also used, in particular for the t-channel BSE.
+
+# ---------------------------------------------------------------------------------------------------
+# Abstract base type
+# ---------------------------------------------------------------------------------------------------
+
+"""
+    abstract type AbstractSolver{Q}
+
+Abstract base type for all parquet/fdDΓA solvers.
+The type parameter `Q` denotes the number type used for all stored quantities
+(typically `ComplexF64`).
+
+Concrete subtypes include `ParquetSolver` (local/SIAM) and `NL2_ParquetSolver`
+(nonlocal/lattice).
+"""
 abstract type AbstractSolver{Q}; end
 
 Base.eltype(::Type{<: AbstractSolver{Q}}) where {Q} = Q
 
+# ---------------------------------------------------------------------------------------------------
+# ParquetSolver struct
+# ---------------------------------------------------------------------------------------------------
+
+"""
+    mutable struct ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
+
+The primary solver struct for the parquet equations in the *local* (momentum-independent)
+approximation.
+
+# Type parameters
+- `Q`     : Scalar number type (typically `ComplexF64`).
+- `VT`    : Type of the target vertex `F` (e.g. `Vertex` or `MBEVertex`).
+- `RefVT` : Type of the reference vertex `F0` (e.g. `RefVertex` for pure parquet approximation,
+            or `Vertex` / `NL2_Vertex` for fdDΓA with a non-trivial reference).
+
+# The reference / target system split
+The solver stores two complete sets of single-particle quantities:
+- Reference system (subscript 0): `G0`, `Σ0`, `F0`, `Π0pp`, `Π0ph`.
+  These are fixed inputs, representing e.g. the DMFT impurity solution or the
+  bare Hubbard model.
+- Target system: `G`, `Σ`, `F`, `Πpp`, `Πph`.
+  These are the unknowns to be solved for self-consistently.
+"""
 mutable struct ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
-    # Bare Green function
+    # Non-interacting (bare) Green's function
     Gbare :: MF_G{Q}
+
+    # ---------------------------------------------------------------------------------------------------
+    # Reference system
+    # ---------------------------------------------------------------------------------------------------
 
     # single-particle Green's function and bubbles for reference system
     G0::MF_G{Q}
@@ -17,6 +68,10 @@ mutable struct ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
     # two-particle vertex for reference system
     F0::RefVT
 
+    # ---------------------------------------------------------------------------------------------------
+    # Target system
+    # ---------------------------------------------------------------------------------------------------
+
     # single-particle Green's function and bubbles for target system
     G::MF_G{Q}
     Πpp::MF_Π{Q}
@@ -25,13 +80,20 @@ mutable struct ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
     # self-energy for target system
     Σ::MF_G{Q}
 
-    # channel-decomposed two-particle vertex for target system
+    # Channel-decomposed target vertex F = F₀ + γp + γt + γa.
     F::VT
 
+    # ---------------------------------------------------------------------------------------------------
+    # Working buffers
+    # ---------------------------------------------------------------------------------------------------
+
     # channel-decomposed two-particle vertex buffer
+    # The BSE routines write their result here; after all channels are updated,
+    # the buffer is copied to F via `set!(S.F, S.Fbuff)`. This prevents in-place
+    # corruption of F while it is still needed as input during the current BSE sweep.
     Fbuff::Vertex{Q, RefVertex{Q}}
 
-    # channel-decomposed two-particle vertex buffer for left part
+    # channel-decomposed two-particle vertex buffer for left part (right part in notation of paper) of the BSE.
     FL::Vertex{Q, RefVertex{Q}}
 
     # K2 vertices used in the SDE
@@ -201,31 +263,31 @@ end
 
 # symmetry group initialization
 function init_sym_grp!(
-    S::ParquetSolver
-    )::Nothing
+    S::ParquetSolver{Q}
+    )::Nothing where {Q}
 
     # self-energy
-    S.SGΣ = my_SymmetryGroup([Symmetry{1}(sΣ)], S.Σ)
+    S.SGΣ = my_SymmetryGroup([Symmetry{1}(w -> sΣ(w, Q))], S.Σ)
 
     # particle-particle channel
-    S.SGpp[1] = my_SymmetryGroup([Symmetry{1}(sK1pp)], S.F.γp.K1)
-    S.SGpp[2] = my_SymmetryGroup([Symmetry{2}(sK2pp1), Symmetry{2}(sK2pp2)], S.F.γp.K2)
-    S.SGpp[3] = my_SymmetryGroup([Symmetry{3}(sK3pp1), Symmetry{3}(sK3pp2), Symmetry{3}(sK3pp3)], S.F.γp.K3)
+    S.SGpp[1] = my_SymmetryGroup([Symmetry{1}(w -> sK1pp(w, Q))], S.F.γp.K1)
+    S.SGpp[2] = my_SymmetryGroup([Symmetry{2}(w -> sK2pp1(w, Q)), Symmetry{2}(w -> sK2pp2(w, Q))], S.F.γp.K2)
+    S.SGpp[3] = my_SymmetryGroup([Symmetry{3}(w -> sK3pp1(w, Q)), Symmetry{3}(w -> sK3pp2(w, Q)), Symmetry{3}(w -> sK3pp3(w, Q))], S.F.γp.K3)
     S.SGppL[1] = S.SGpp[1]
     S.SGppL[2] = S.SGpp[2]
-    S.SGppL[3] = my_SymmetryGroup([Symmetry{3}(sK3pp1), Symmetry{3}(sK3pp3)], S.F.γp.K3)
+    S.SGppL[3] = my_SymmetryGroup([Symmetry{3}(w -> sK3pp1(w, Q)), Symmetry{3}(w -> sK3pp3(w, Q))], S.F.γp.K3)
 
     # particle-hole channels
-    S.SGph[1] = my_SymmetryGroup([Symmetry{1}(sK1ph)], S.F.γt.K1)
-    S.SGph[2] = my_SymmetryGroup([Symmetry{2}(sK2ph1), Symmetry{2}(sK2ph2)], S.F.γt.K2)
-    S.SGph[3] = my_SymmetryGroup([Symmetry{3}(sK3ph1), Symmetry{3}(sK3ph2), Symmetry{3}(sK3ph3)], S.F.γt.K3)
+    S.SGph[1] = my_SymmetryGroup([Symmetry{1}(w -> sK1ph(w, Q))], S.F.γt.K1)
+    S.SGph[2] = my_SymmetryGroup([Symmetry{2}(w -> sK2ph1(w, Q)), Symmetry{2}(w -> sK2ph2(w, Q))], S.F.γt.K2)
+    S.SGph[3] = my_SymmetryGroup([Symmetry{3}(w -> sK3ph1(w, Q)), Symmetry{3}(w -> sK3ph2(w, Q)), Symmetry{3}(w -> sK3ph3(w, Q))], S.F.γt.K3)
     S.SGphL[1] = S.SGph[1]
     S.SGphL[2] = S.SGph[2]
-    S.SGphL[3] = my_SymmetryGroup([Symmetry{3}(sK3ph1), Symmetry{3}(sK3ph3)], S.F.γt.K3)
+    S.SGphL[3] = my_SymmetryGroup([Symmetry{3}(w -> sK3ph1(w, Q)), Symmetry{3}(w -> sK3ph3(w, Q))], S.F.γt.K3)
 
     # For F0
-    S.SG0pp2 = my_SymmetryGroup([Symmetry{2}(sK2pp1), Symmetry{2}(sK2pp2)], S.L0pp)
-    S.SG0ph2 = my_SymmetryGroup([Symmetry{2}(sK2ph1), Symmetry{2}(sK2ph2)], S.L0pp)
+    S.SG0pp2 = my_SymmetryGroup([Symmetry{2}(w -> sK2pp1(w, Q)), Symmetry{2}(w -> sK2pp2(w, Q))], S.L0pp)
+    S.SG0ph2 = my_SymmetryGroup([Symmetry{2}(w -> sK2ph1(w, Q)), Symmetry{2}(w -> sK2ph2(w, Q))], S.L0pp)
 
     return nothing
 end
