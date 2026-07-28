@@ -29,7 +29,7 @@ function sK3_NL3_pp2(
     w :: Tuple{MatsubaraFrequency, MatsubaraFrequency, MatsubaraFrequency, BrillouinPoint{2}, BrillouinPoint{2}, BrillouinPoint{2}},
     m :: KMesh
     )
-    return (w[1], w[3], w[2], w[4], w[6], w[5]), Operation{}()
+    return (w[1], w[3], w[2], w[4], w[6], w[5]), Operation{ComplexF64}()
 end
 
 function sK3_NL3_pp3(
