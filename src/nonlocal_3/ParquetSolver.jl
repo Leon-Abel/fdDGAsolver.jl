@@ -203,29 +203,10 @@ function init_sym_grp!(
     mK_Σ = meshes(S.Σ, Val(2))
     mK_Γ = meshes(S.F.γp.K1, Val(2))
 
-    # self-energy
-    @time S.SGΣ = my_SymmetryGroup(Symmetry{2}[
-        Symmetry{2}(w -> sΣ_conj(w, mK_Σ)),
-        Symmetry{2}(w -> sΣ_ref(w, mK_Σ)),
-        Symmetry{2}(w -> sΣ_rot(w, mK_Σ))
-    ], S.Σ);
-
-    # Vertices in the particle-particle channel
-
-    @time S.SGpp[1] = my_SymmetryGroup(Symmetry{2}[
-        Symmetry{2}(w -> sK1_conj(w, mK_Γ)),
-        Symmetry{2}(w -> sK1_ref(w, mK_Γ)),
-        Symmetry{2}(w -> sK1_rot(w, mK_Γ)),
-    ], S.F.γp.K1);
-
-    @time S.SGpp[2] = my_SymmetryGroup([
-        Symmetry{4}(w -> sK2_NL2_pp1(w, mK_Γ)),
-        Symmetry{4}(w -> sK2_NL2_pp2(w, mK_Γ)),
-        Symmetry{4}(w -> sK2_NL2_ref(w, mK_Γ)),
-        Symmetry{4}(w -> sK2_NL2_rot(w, mK_Γ)),
-    ], S.F.γp.K2)
-
-    @time S.SGpp[3] = my_SymmetryGroup([
+    # The individual symmetry groups are built independently of each other and only read
+    # from S, so they can be constructed concurrently. The four K3 groups dominate the
+    # runtime (their meshes carry three momenta each), hence they are spawned first.
+    t_SGpp3 = Threads.@spawn my_SymmetryGroup([
         Symmetry{6}(w -> sK3_NL3_pp1(w, mK_Γ)),
         Symmetry{6}(w -> sK3_NL3_pp2(w, mK_Γ)),
         Symmetry{6}(w -> sK3_NL3_pp3(w, mK_Γ)),
@@ -233,27 +214,14 @@ function init_sym_grp!(
         Symmetry{6}(w -> sK3_NL3_rot(w, mK_Γ)),
     ], S.F.γp.K3)
 
-    S.SGppL[1] = S.SGpp[1]
-    S.SGppL[2] = S.SGpp[2]
-    @time S.SGppL[3] = my_SymmetryGroup([
+    t_SGppL3 = Threads.@spawn my_SymmetryGroup([
         Symmetry{6}(w -> sK3_NL3_pp1(w, mK_Γ)),
         Symmetry{6}(w -> sK3_NL3_pp3(w, mK_Γ)),
         Symmetry{6}(w -> sK3_NL3_ref(w, mK_Γ)),
         Symmetry{6}(w -> sK3_NL3_rot(w, mK_Γ)),
     ], S.F.γp.K3)
 
-    # particle-hole channels
-
-    S.SGph[1] = S.SGpp[1]
-
-    @time S.SGph[2] = my_SymmetryGroup([
-        Symmetry{4}(w -> sK2_NL2_ph1(w, mK_Γ)),
-        Symmetry{4}(w -> sK2_NL2_ph2(w, mK_Γ)),
-        Symmetry{4}(w -> sK2_NL2_ref(w, mK_Γ)),
-        Symmetry{4}(w -> sK2_NL2_rot(w, mK_Γ)),
-    ], S.F.γt.K2)
-
-    @time S.SGph[3] = my_SymmetryGroup([
+    t_SGph3 = Threads.@spawn my_SymmetryGroup([
         Symmetry{6}(w -> sK3_NL3_ph1(w, mK_Γ)),
         Symmetry{6}(w -> sK3_NL3_ph2(w, mK_Γ)),
         Symmetry{6}(w -> sK3_NL3_ph3(w, mK_Γ)),
@@ -261,30 +229,77 @@ function init_sym_grp!(
         Symmetry{6}(w -> sK3_NL3_rot(w, mK_Γ)),
     ], S.F.γt.K3)
 
-    S.SGphL[1] = S.SGph[1]
-    S.SGphL[2] = S.SGph[2]
-    @time S.SGphL[3] = my_SymmetryGroup([
+    t_SGphL3 = Threads.@spawn my_SymmetryGroup([
         Symmetry{6}(w -> sK3_NL3_ph1(w, mK_Γ)),
         Symmetry{6}(w -> sK3_NL3_ph3(w, mK_Γ)),
         Symmetry{6}(w -> sK3_NL3_ref(w, mK_Γ)),
         Symmetry{6}(w -> sK3_NL3_rot(w, mK_Γ)),
     ], S.F.γt.K3)
 
+    # self-energy
+    t_SGΣ = Threads.@spawn my_SymmetryGroup(Symmetry{2}[
+        Symmetry{2}(w -> sΣ_conj(w, mK_Σ)),
+        Symmetry{2}(w -> sΣ_ref(w, mK_Σ)),
+        Symmetry{2}(w -> sΣ_rot(w, mK_Σ))
+    ], S.Σ)
+
+    # Vertices in the particle-particle channel
+    t_SGpp1 = Threads.@spawn my_SymmetryGroup(Symmetry{2}[
+        Symmetry{2}(w -> sK1_conj(w, mK_Γ)),
+        Symmetry{2}(w -> sK1_ref(w, mK_Γ)),
+        Symmetry{2}(w -> sK1_rot(w, mK_Γ)),
+    ], S.F.γp.K1)
+
+    t_SGpp2 = Threads.@spawn my_SymmetryGroup([
+        Symmetry{4}(w -> sK2_NL2_pp1(w, mK_Γ)),
+        Symmetry{4}(w -> sK2_NL2_pp2(w, mK_Γ)),
+        Symmetry{4}(w -> sK2_NL2_ref(w, mK_Γ)),
+        Symmetry{4}(w -> sK2_NL2_rot(w, mK_Γ)),
+    ], S.F.γp.K2)
+
+    # particle-hole channels
+    t_SGph2 = Threads.@spawn my_SymmetryGroup([
+        Symmetry{4}(w -> sK2_NL2_ph1(w, mK_Γ)),
+        Symmetry{4}(w -> sK2_NL2_ph2(w, mK_Γ)),
+        Symmetry{4}(w -> sK2_NL2_ref(w, mK_Γ)),
+        Symmetry{4}(w -> sK2_NL2_rot(w, mK_Γ)),
+    ], S.F.γt.K2)
 
     # Symmetry group of F0, needed for the BSE of the reference vertex in SDE for fdPA
-    @time S.SG0pp2 = my_SymmetryGroup([
+    t_SG0pp2 = Threads.@spawn my_SymmetryGroup([
         Symmetry{4}(w -> sK2_NL2_pp1(w, mK_Γ)),
         Symmetry{4}(w -> sK2_NL2_pp2(w, mK_Γ)),
         Symmetry{4}(w -> sK2_NL2_ref(w, mK_Γ)),
         Symmetry{4}(w -> sK2_NL2_rot(w, mK_Γ)),
     ], S.L0pp)
-    @time S.SG0ph2 = my_SymmetryGroup([
+
+    t_SG0ph2 = Threads.@spawn my_SymmetryGroup([
         Symmetry{4}(w -> sK2_NL2_ph1(w, mK_Γ)),
         Symmetry{4}(w -> sK2_NL2_ph2(w, mK_Γ)),
         Symmetry{4}(w -> sK2_NL2_ref(w, mK_Γ)),
         Symmetry{4}(w -> sK2_NL2_rot(w, mK_Γ)),
     ], S.L0pp)
 
+    S.SGΣ = fetch(t_SGΣ)
+
+    S.SGpp[1] = fetch(t_SGpp1)
+    S.SGpp[2] = fetch(t_SGpp2)
+    S.SGpp[3] = fetch(t_SGpp3)
+
+    S.SGppL[1] = S.SGpp[1]
+    S.SGppL[2] = S.SGpp[2]
+    S.SGppL[3] = fetch(t_SGppL3)
+
+    S.SGph[1] = S.SGpp[1]
+    S.SGph[2] = fetch(t_SGph2)
+    S.SGph[3] = fetch(t_SGph3)
+
+    S.SGphL[1] = S.SGph[1]
+    S.SGphL[2] = S.SGph[2]
+    S.SGphL[3] = fetch(t_SGphL3)
+
+    S.SG0pp2 = fetch(t_SG0pp2)
+    S.SG0ph2 = fetch(t_SG0ph2)
 
     return nothing
 end
