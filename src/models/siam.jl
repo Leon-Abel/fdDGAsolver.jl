@@ -9,7 +9,8 @@ of freedom exactly (no interaction U), yielding the impurity Dyson equation:
 
     G₀(iν)⁻¹ = iν - e - Δ(iν)
  
-- `Δ` : Hybridization function encoding the coupling to the bath.
+- `Δ` : Hybridization strength Γ = π·ρ(0)·|V|² (a real scalar), which sets the
+        magnitude of the frequency-dependent hybridization function Δ(iν).
 - `e` : Impurity on-site energy plus Hartree contribution of the self-energy, therefore 
         `e = 0` corresponds to particle-hole symmetry (half-filling)
 - `D` : Half bandwidth. Use `D = Inf` for the wide-band limit; `D < Inf` for a finite box-shaped bath.
