@@ -1,26 +1,42 @@
+# build_K3_cache.jl
+#
 # Precompute the vertex components that are used repeatedly in the BSE for the K3 vertex.
+#
+# Φ_r(ω, ν, ν') = K_1r(Ω) + K_2r(Ω, ν) + K_2r(Ω, ν') + K_3r(Ω, ν, ν')
+#               = I_r * Π_r * F
+# 
+# // I_r = F_0 + (I_r - F_0), F = F_012r + (F - F_012r), F_012r = F_0 + K_1r + K_2r //
+#
+#               = F_0 * Π_r(Ω, ω) * F_012r(Ω, ω) 
+#               + (I_r - F_0)(Ω, ν, ω) * Π_r(Ω, ω) * F_012r(Ω,ω)
+#               + F_0 * Π_r(Ω, ω) * (I_r - F_0)(Ω, ω, ν') 
+#               + (I_r - F_0)(Ω, ν, ω) * Π_r(Ω, ω) * (I_r - F_0)(Ω, ω, ν')
 #
 # The K3 channel BSE has the form ``C(Ω, ν, ν') = A(Ω, ν, ω) * Π(Ω, ω) * B(Ω, ω, ν')``.
 # Since the vertex `A(Ω, ν, ω)` does not depend on `ν'`, it can be computed outside the
 # loop over `ν'`. The same applies to the vertex `B(Ω, ω, ν')`.
-# Here, we compute all the necessary vertices that appears in the BSE for the K3 vertex.
+# Here, we compute all the necessary vertices that appear in the BSE for the K3 vertex.
 # In the code, we denote the inner, integrated frequency variable with `ω` and the
 # outer frequency variable with `ν` and `νp`.
 #
 # The `ω` component of the precomputed vertex should be computed on the frequency mesh of
-# the bubble, which is larger than that of the K3 vertex.
+# the bubble, which is coarser than that of the K3 vertex.
 #
 # We store only the decaying contributions of the vertices, i.e., we subtract the asymptotic
 # contributions, as they are accounted for in the BSE for the K1 and K2 vertices.
+# Concretely, for a vertex V(Ω, ν, ω) we cache V(Ω, ν, ω) - V(Ω, ν, ω→∞), where the
+# ω→∞ limit retains only the K1 and K2 contributions (which are ν-independent or
+# ω-independent in that limit).
 #
 # There are multiple types of vertices to precompute.
-# (1) `cache_F0*`: Full vertex of the reference system (`S.F0`)
-# (2) `cache_Γ*` : Irreducible finite-difference vertex (`S.F` with `F0=false`, `γ*=false`)
-# (3) `cache_F*` : Full vertex of the target system (`S.F`)
+# - `cache_F0*`: Full vertex of the reference system (`S.F0`)
+# - `cache_Γ*` : Irreducible finite-difference vertex (`S.F` with `F0=false`, `γ*=false`)
+# - `cache_F*` : Full vertex of the target system (`S.F`)
 function build_K3_cache!(
     S :: ParquetSolver{Q}
     ) where {Q}
 
+    # Zero-initialise all caches before filling them.
     set!(S.cache_Γpx, 0)
     set!(S.cache_F0p, 0)
     set!(S.cache_F0a, 0)
@@ -32,9 +48,13 @@ function build_K3_cache!(
     set!(S.cache_Fa,  0)
     set!(S.cache_Ft,  0)
 
-    # Vertices multiplied by bubbles to the left (by ω)
-    # Γpx : Target, irreducible vertex in the p channel, xSp component.
+    # PART 1: Caches indexed as (Ω, ω, νp).
+    # These are the vertices B(Ω, ω, νp) multiplied by bubbles from the right (by ω) that appear in the
+    # K3 BSE kernel C(Ω, ν, νp) = A(Ω, ν, ω) * Π(Ω, ω) * B(Ω, ω, νp).
+    # Since they depend on νp but NOT on ν, they can be precomputed independently of the ν loop.
 
+    # Γpx: p-channel irreducible vertex of the TARGET system in the *crossed*
+    # spin component (xSp). 
     Threads.@threads for i in mpi_split(1 : length(S.cache_Γpx.data))
         Ω, ω, νp = value.(MatsubaraFunctions.to_meshes(S.cache_Γpx, i))
 
