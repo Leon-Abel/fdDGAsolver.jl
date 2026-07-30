@@ -45,10 +45,10 @@ using Printf
 # Command-line arguments
 # -----------------------------------------------------------------------
 nmax                  = length(ARGS) >= 1 ? parse(Int, ARGS[1])  : 10
-nq                    = length(ARGS) >= 2 ? parse(Int, ARGS[2])  : 8
-NL_method             = length(ARGS) >= 3 ? parse(Int, ARGS[3])  : 1
+nq                    = length(ARGS) >= 2 ? parse(Int, ARGS[2])  : 4
+NL_method             = length(ARGS) >= 3 ? parse(Int, ARGS[3])  : 2
 filename_dmft_partial = length(ARGS) >= 4 ? ARGS[4]              : "data\\high_temperature_U0.5.h5"
-do_PA                 = length(ARGS) >= 5 ? parse(Bool, ARGS[5]) : true
+do_PA                 = length(ARGS) >= 5 ? parse(Bool, ARGS[5]) : false
 do_fd                 = length(ARGS) >= 6 ? parse(Bool, ARGS[6]) : true
 
 # Solver stopping criteria (shared by both runs and recorded in the saved files)
@@ -75,6 +75,20 @@ function save_convergence!(f, result; tol, maxiter)
     g["tol"]           = tol
     g["maxiter"]       = maxiter
     return nothing
+end
+
+# -----------------------------------------------------------------------
+# Save one converged solver together with its convergence metadata.
+# Returns the output path. Intended to be called on the main rank only.
+# -----------------------------------------------------------------------
+function save_solver!(output_dir, tag, S, result; U, T, nmax, nq, NL_method, tol, maxiter)
+    fname = joinpath(output_dir,
+        "hubbard_$(tag)_U$(U)_T$(T)_nmax$(nmax)_nq$(nq)_NL$(NL_method).h5")
+    h5open(fname, "w") do f
+        save!(f, "S", S)
+        save_convergence!(f, result; tol, maxiter)
+    end
+    return fname
 end
 
 # -----------------------------------------------------------------------
@@ -114,6 +128,13 @@ Gbare = hubbard_bare_Green(MatsubaraMesh(T, nG, Fermion), mk_G; μ, t1, t2, t3)
 Ω0 = MatsubaraFrequency(T, 0, Boson)     # iω = 0
 ν0 = MatsubaraFrequency(T, 0, Fermion)   # iν = iπT
 
+# -----------------------------------------------------------------------
+# Output directory — created up front so each solver can be saved as soon
+# as it converges and then dropped from memory before the next is built.
+# -----------------------------------------------------------------------
+output_dir = joinpath(dirname(pathof(fdDGAsolver)), "../output/hubbard_model")
+mpi_ismain() && mkpath(output_dir)
+
 
 # -----------------------------------------------------------------------
 # 1) Parquet Approximation (PA) — no DMFT input, bare vertex as F0
@@ -121,7 +142,7 @@ Gbare = hubbard_bare_Green(MatsubaraMesh(T, nG, Fermion), mk_G; μ, t1, t2, t3)
 if do_PA == true
     mpi_ismain() && println("\n=== Running PA ===")
 
-    println("Create solver.")
+    mpi_ismain() && println("Create solver.")
     # create solver object
     if NL_method == 1
         # approximate K2(q,k) ≈ K2(q) and K3(q, k, k') ≈ K3(q)
@@ -145,11 +166,11 @@ if do_PA == true
         error("NL method not recognized!")
     end
 
-    println("Initialize symmetry group.")
+    mpi_ismain() && println("Initialize symmetry group.")
     # fill symmertries
     init_sym_grp!(S_PA)
 
-    println("Start solver.")
+    mpi_ismain() && println("Start solver.")
     # solve
     result_PA = fdDGAsolver.solve!(S_PA;
         strategy = :scPA,
@@ -157,6 +178,20 @@ if do_PA == true
         tol,
         verbose  = mpi_ismain(),
     )
+
+    # Save immediately, then release the PA solver so it does not occupy
+    # memory while the (equally large) fd solver is built and solved.
+    if mpi_ismain()
+        println("\n=== Saving sc-data ===")
+        fname_PA = save_solver!(output_dir, "sc", S_PA, result_PA;
+            U, T, nmax, nq, NL_method, tol, maxiter)
+        println("sc-data saved to $fname_PA")
+    end
+
+    # Drop references on every rank (each rank holds a full solver copy) and
+    # reclaim the arrays before continuing.
+    global S_PA      = nothing
+    global result_PA = nothing
 end
 
 # -----------------------------------------------------------------------
@@ -165,7 +200,7 @@ end
 if do_fd == true
     mpi_ismain() && println("\n=== Running pDΓA ===")
 
-    println("Load reference system.")
+    mpi_ismain() && println("Load reference system.")
     # Reference single-particle quantities from DMFT (k-independent / local)
     G0 = copy(Gbare); set!(G0, 0)
     Σ0 = copy(Gbare); set!(Σ0, 0)
@@ -175,7 +210,7 @@ if do_fd == true
     end
     occ_target = data_triqs.occ
 
-    println("Create solver.")
+    mpi_ismain() && println("Create solver.")
     if NL_method == 1
         F0 = NL_Vertex(data_triqs.Γ, T, nK1, nK2, nK3, mk_F)
         # approximate K2(q,k) ≈ K2(q) and K3(q, k, k') ≈ K3(q)
@@ -201,49 +236,33 @@ if do_fd == true
         error("NL method not recognized!")
     end
 
-    println("Initialize symmetry group.")
-    # fill symmertries
-    init_sym_grp!(S_fd)
+    # release large reference vertex (F0) and reference single-particle inputs.
+    global F0        = nothing
+    global G0        = nothing
+    global Σ0        = nothing
 
-    println("Start solver.")
+    mpi_ismain() && println("Initialize symmetry group.")
+    # fill symmertries
+    @time init_sym_grp!(S_fd)
+
+    mpi_ismain() && println("Start solver.")
     # solve
-    result_fd = fdDGAsolver.solve!(S_fd;
+    @time result_fd = fdDGAsolver.solve!(S_fd;
         strategy = :fdPA,
         maxiter,
         tol,
         verbose  = mpi_ismain(),
     )
-end
 
-# -----------------------------------------------------------------------
-# Save
-# -----------------------------------------------------------------------
-if mpi_ismain()
-
-    output_dir = joinpath(dirname(pathof(fdDGAsolver)), "../output/hubbard_model")
-    mkpath(output_dir)
-
-    # save sc-data
-    if do_PA == true
-        mpi_ismain() && println("\n=== Saving sc-data ===")
-
-        h5open(joinpath(output_dir, "hubbard_sc_U$(U)_T$(T)_nmax$(nmax)_nq$(nq)_NL$(NL_method).h5"), "w") do f
-        save!(f, "S", S_PA)
-        save_convergence!(f, result_PA; tol, maxiter)
-        end
-
-        mpi_ismain() && println("sc-data saved to $(joinpath(output_dir, "hubbard_sc_U$(U)_T$(T)_nmax$(nmax)_nq$(nq)_NL$(NL_method).h5"))")
+    # Save immediately, then release the fd solver
+    if mpi_ismain()
+        println("\n=== Saving fd-data ===")
+        fname_fd = save_solver!(output_dir, "fd", S_fd, result_fd;
+            U, T, nmax, nq, NL_method, tol, maxiter)
+        println("fd-data saved to $fname_fd")
     end
 
-    # save sc-data
-    if do_fd == true
-        mpi_ismain() && println("\n=== Saving fd-data ===")
-
-        h5open(joinpath(output_dir, "hubbard_fd_U$(U)_T$(T)_nmax$(nmax)_nq$(nq)_NL$(NL_method).h5"), "w") do f
-        save!(f, "S", S_fd)
-        save_convergence!(f, result_fd; tol, maxiter)
-        end
-
-        mpi_ismain() && println("fd-data saved to $(joinpath(output_dir, "hubbard_fd_U$(U)_T$(T)_nmax$(nmax)_nq$(nq)_NL$(NL_method).h5"))")
-    end
+    global S_fd      = nothing
+    global result_fd = nothing
+    
 end
