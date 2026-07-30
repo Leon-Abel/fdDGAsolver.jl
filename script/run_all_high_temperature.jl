@@ -25,11 +25,11 @@ The number of threads used for each run matches the threads of this driver
 # ---------------------------------------------------------------------------
 # Parameters (forwarded verbatim to run_hubbard_model.jl)
 # ---------------------------------------------------------------------------
-nmax      = length(ARGS) >= 1 ? ARGS[1] : "10"
-nq        = length(ARGS) >= 2 ? ARGS[2] : "4"
-NL_method = length(ARGS) >= 3 ? ARGS[3] : "1"
-do_PA     = length(ARGS) >= 4 ? ARGS[4] : "false"
-do_fd     = length(ARGS) >= 5 ? ARGS[5] : "true"
+nmax      = length(ARGS) >= 1 ? parse(Int, ARGS[1])  : 4
+nq        = length(ARGS) >= 2 ? parse(Int, ARGS[2])  : 2
+NL_method = length(ARGS) >= 3 ? parse(Int, ARGS[3])  : 1
+do_PA     = length(ARGS) >= 4 ? parse(Bool, ARGS[4]) : true
+do_fd     = length(ARGS) >= 5 ? parse(Bool, ARGS[5]) : false
 
 repo_root = normpath(joinpath(@__DIR__, ".."))
 data_dir  = joinpath(repo_root, "data")
