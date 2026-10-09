@@ -1,13 +1,22 @@
-# Visualize local vertex.
-# Not included in the package to avoid having PyPlot (or Requires) as dependency.
-# To use these functions, `include` the source file in your script.
+# Visualize a local vertex — the PyPlot-era plotting helpers, kept for reference.
+#
+# NOT part of the pipeline in script/README.md and NOT runnable under
+# `--project=script`: every call below (`plot`, `gca`, `gcf`, `xlim`, `legend`)
+# is PyPlot's, and PyPlot is deliberately not a dependency of this repo or of
+# script/Project.toml — it drags in a Python matplotlib install. The Makie
+# scripts in this folder are the supported ones; `plot_DMFT_data.jl` covers the
+# same objects.
+#
+# To use these anyway: `] add PyPlot`, then `using PyPlot, MatsubaraFunctions`
+# and `include` this file.
 
 function plot_self_energy(Σ, ax1 = gca(), ax2 = gca(); show = false, kwargs...)
     ax1.plot(values(Σ.meshes[1]), real.(Σ.data .* -im), "o-"; kwargs...)
     ax2.plot(values(Σ.meshes[1]), imag.(Σ.data .* -im), "x-"; kwargs...)
     if show
-        ax1.set_xlim([-10, 10] .* (2π * temperature(Γ)))
-        ax2.set_xlim([-10, 10] .* (2π * temperature(Γ)))
+        T = temperature(Σ.meshes[1])
+        ax1.set_xlim([-10, 10] .* (2π * T))
+        ax2.set_xlim([-10, 10] .* (2π * T))
         ax1.legend()
         fig = gcf(); display(fig); close(fig)
     end
