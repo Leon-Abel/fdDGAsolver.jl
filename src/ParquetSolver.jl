@@ -1,133 +1,158 @@
-# ParquetSolver.jl
+# =============================================================================
+# The solver object of the local (impurity) problem, and helpers shared by
+# all solvers.
 #
-# Implements the main solver type and associated utilities for the finite-difference
-# dynamical vertex approximation (fdDΓA) / parquet approximation.
+# A solver holds everything one parquet calculation needs:
+#   reference system (known solution, lower case in Lihm 2025):
+#       G0 = g, Σ0 = σ, F0 = f, bubbles Π0pp, Π0ph = π
+#   target system (the unknowns, upper case in Lihm 2025):
+#       G, Σ, F = f + Φ̃_a + Φ̃_p + Φ̃_t, bubbles Πpp, Πph
+#   Gbare, the bare propagator of the target, used in the Dyson equation,
+#   and work buffers: the output of a BSE sweep (Fbuff), the left part FL of
+#   the BSE, the SDE kernels, symmetry groups and the K3 caches.
 #
-# Spin structure: vertices are stored in the parallel spin component (pSp), and the
-# crossed component (xSp) is reconstructed on the fly via crossing symmetry.
-# The density component dSp = 2*pSp + xSp is also used, in particular for the t-channel BSE.
+# The parquet approximation (PA) is the special case with the bare reference
+# g = σ = 0 and f = U (parquet_solver_siam_parquet_approximation). Then
+# Φ̃_r = Φ_r and the fd equations become the ordinary parquet equations.
+#
+# Paper ↔ code: f, g, σ, π ↔ F0, G0, Σ0, Π0 (suffix 0 = reference);
+# F, G, Σ, Π ↔ F, G, Σ, Π. In Lihm 2025, F₀ is the bare vertex. In the code
+# that is bare_vertex(F), while the field F0 is the reference vertex. G and Σ
+# are stored as iG and iΣ (dyson.jl).
+#
+# The lattice solvers (nonlocal*/ParquetSolver.jl) have the same layout, with
+# momentum-dependent fields.
+# =============================================================================
 
-# ---------------------------------------------------------------------------------------------------
-# Abstract base type
-# ---------------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Abstract type
+# -----------------------------------------------------------------------------
 
 """
-    abstract type AbstractSolver{Q}
+    AbstractSolver{Q}
 
-Abstract base type for all parquet/fdDΓA solvers.
-The type parameter `Q` denotes the number type used for all stored quantities
-(typically `ComplexF64`).
-
-Concrete subtypes include `ParquetSolver` (local/SIAM) and `NL2_ParquetSolver`
-(nonlocal/lattice).
+Supertype of all solvers, with number type `Q` (usually `ComplexF64`):
+[`ParquetSolver`](@ref) (local) and `NL_ParquetSolver`, `NL2_ParquetSolver`,
+`NL3_ParquetSolver` (lattice). Code written for `AbstractSolver` only uses
+the fields all of them share (see `ParquetSolver`).
 """
 abstract type AbstractSolver{Q}; end
 
+# number type of the stored data
 Base.eltype(::Type{<: AbstractSolver{Q}}) where {Q} = Q
 
-# ---------------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # ParquetSolver struct
-# ---------------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 """
-    mutable struct ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
+    ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
 
-The primary solver struct for the parquet equations in the *local* (momentum-independent)
-approximation.
+Solver for the fd parquet equations of the impurity (no momenta), Lihm 2025,
+Eqs. (5), (S29), (S38).
 
-# Type parameters
-- `Q`     : Scalar number type (typically `ComplexF64`).
-- `VT`    : Type of the target vertex `F` (e.g. `Vertex` or `MBEVertex`).
-- `RefVT` : Type of the reference vertex `F0` (e.g. `RefVertex` for pure parquet approximation,
-            or `Vertex` / `NL2_Vertex` for fdDΓA with a non-trivial reference).
+Type parameters: `Q` number type, `VT` type of the target vertex `F` (e.g.
+`Vertex`, `MBEVertex`), `RefVT` type of the reference vertex `F0` (`RefVertex`
+in the PA, or a vertex for an fd calculation with a non-trivial reference).
 
-# The reference / target system split
-The solver stores two complete sets of single-particle quantities:
-- Reference system (subscript 0): `G0`, `Σ0`, `F0`, `Π0pp`, `Π0ph`.
-  These are fixed inputs, representing e.g. the DMFT impurity solution or the
-  bare Hubbard model.
-- Target system: `G`, `Σ`, `F`, `Πpp`, `Πph`.
-  These are the unknowns to be solved for self-consistently.
+Reference system, fixed inputs: `G0`, `Σ0`, `F0` and the bubbles
+`Π0pp`, `Π0ph`. Target system, the unknowns: `G`, `Σ`, `F` (with `F.F0 === F0`)
+and the bubbles `Πpp`, `Πph`. `Gbare` is the target's bare propagator.
+
+    ParquetSolver(nK1, nK2, nK3, Gbare, G0, Σ0, F0, VT = Vertex; mode = :threads, mΠν_factor = 6)
+
+Build a solver with K1/K2/K3 box sizes `nK1`, `nK2`, `nK3`.
+- The reference bubbles are computed once from `G0`, on a mesh with `nK1`
+  bosonic and `nK1 * mΠν_factor` fermionic frequencies. The sum over the
+  internal frequency in the K1 and K2 BSEs runs over this mesh.
+- The target starts from `Σ = Σ0` (G from the Dyson equation) and
+  `F = F0` with zero channels, i.e. Φ̃ = 0.
+- `mode` selects the parallelization (`:serial`, `:threads`, `:hybrid`).
+
+Call [`init_sym_grp!`](@ref) before solving.
 """
 mutable struct ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
-    # Non-interacting (bare) Green's function
+    # Non-interacting (bare) Green's function of the target system
     Gbare :: MF_G{Q}
 
-    # ---------------------------------------------------------------------------------------------------
-    # Reference system
-    # ---------------------------------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Reference system (known solution; fixed during the solve)
+    # -------------------------------------------------------------------------
 
-    # single-particle Green's function and bubbles for reference system
+    # single-particle Green's function g and bubbles π for the reference system
     G0::MF_G{Q}
     Π0pp::MF_Π{Q}
     Π0ph::MF_Π{Q}
 
-    # self-energy for reference system
+    # self-energy σ for the reference system
     Σ0::MF_G{Q}
 
-    # two-particle vertex for reference system
+    # two-particle vertex f for the reference system
     F0::RefVT
 
-    # ---------------------------------------------------------------------------------------------------
-    # Target system
-    # ---------------------------------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Target system (the unknowns)
+    # -------------------------------------------------------------------------
 
-    # single-particle Green's function and bubbles for target system
+    # single-particle Green's function and bubbles for the target system
     G::MF_G{Q}
     Πpp::MF_Π{Q}
     Πph::MF_Π{Q}
 
-    # self-energy for target system
+    # self-energy for the target system
     Σ::MF_G{Q}
 
-    # Channel-decomposed target vertex F = F₀ + γp + γt + γa.
+    # target vertex F = F0 + γp + γt + γa, i.e. f + Φ̃_p + Φ̃_t + Φ̃_a
     F::VT
 
-    # ---------------------------------------------------------------------------------------------------
-    # Working buffers
-    # ---------------------------------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Work buffers
+    # -------------------------------------------------------------------------
 
-    # channel-decomposed two-particle vertex buffer
-    # The BSE routines write their result here; after all channels are updated,
-    # the buffer is copied to F via `set!(S.F, S.Fbuff)`. This prevents in-place
-    # corruption of F while it is still needed as input during the current BSE sweep.
+    # Output of one BSE sweep: the new channels Φ̃_r. All BSEs of a sweep read
+    # the old F and write here; afterwards the buffer is copied to F via
+    # `set!(S.F, S.Fbuff)`. Its F0 is a RefVertex with U = 0 (unused).
     Fbuff::Vertex{Q, RefVertex{Q}}
 
-    # channel-decomposed two-particle vertex buffer for left part (right part in notation of paper) of the BSE.
+    # Left part of the BSE, FL = Ĩ_r π_r f (K2 and K3 classes; no K1). It is
+    # the "left" term in the code's mirrored form of Lihm 2025, Eq. (5), i.e.
+    # the right-most term f π_r Ĩ_r in the paper's ordering. Computed once per
+    # sweep by BSE_L_K2! and BSE_L_K3!.
     FL::Vertex{Q, RefVertex{Q}}
 
-    # K2 vertices used in the SDE
+    # SDE kernels (SDE.jl): Lpp, Lph for the target, L0pp, L0ph for the
+    # reference. They have the shape of a K2 class.
     Lpp  :: MF_K2{Q}
     Lph  :: MF_K2{Q}
     L0pp :: MF_K2{Q}
     L0ph :: MF_K2{Q}
 
-    # symmetry group for the self energy
+    # Symmetry groups (symmetries.jl, set by init_sym_grp!). Each computes one
+    # point per set of symmetry-related points and fills in the rest.
+    # symmetry group for the self-energy
     SGΣ::SymmetryGroup
 
-    # symmetry groups for the particle-particle channel of F
+    # symmetry groups for K1, K2, K3 of the p channel of F
     SGpp::Vector{SymmetryGroup}
 
-    # symmetry groups for the particle-hole channels of F
+    # symmetry groups for K1, K2, K3 of the a and t channels of F
     SGph::Vector{SymmetryGroup}
 
-    # symmetry groups for the particle-particle channel of FL
+    # the same for the left part FL (without the ν ↔ ν′ symmetry)
     SGppL::Vector{SymmetryGroup}
-
-    # symmetry groups for the particle-hole channels of FL
     SGphL::Vector{SymmetryGroup}
 
-    # symmetry groups for the particle-particle channel of F0. Used only for fdPA
+    # symmetry groups for the reference SDE kernels L0pp, L0ph (fd runs)
     SG0pp2::SymmetryGroup
-
-    # symmetry groups for the particle-hole channels of F0. Used only for fdPA
     SG0ph2::SymmetryGroup
 
     # Parallelization mode
     mode::Symbol
 
-    # Pre-evaluated vertices. To be used in the BSE of the K3 class
-    # See build_K3_cache.jl for details.
+    # Vertex slices for the K3 BSE, precomputed once per sweep on the K3 box
+    # (build_K3_cache.jl): cache_Γr = Ĩ_r, cache_F0r = f - f(ν′ → ∞),
+    # cache_Fr = F - F(ν → ∞) for channel r. cache_Γpx is Ĩ_p in the crossed
+    # spin component; the t-channel caches hold the density combination.
     cache_Γpx :: MF_K3{Q}
     cache_F0p :: MF_K3{Q}
     cache_F0a :: MF_K3{Q}
@@ -139,7 +164,7 @@ mutable struct ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
     cache_Fa  :: MF_K3{Q}
     cache_Ft  :: MF_K3{Q}
 
-    # constructor
+    # constructor, see the docstring above
     function ParquetSolver(
         nK1   :: Int64,
         nK2   :: NTuple{2,Int64},
@@ -156,7 +181,7 @@ mutable struct ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
 
         T = MatsubaraFunctions.temperature(meshes(G0, Val(1)))
 
-        # precompute bubbles for reference system
+        # bubbles π of the reference system, computed once
         mΠΩ = MatsubaraMesh(temperature(F0), nK1, Boson)
         mΠν = MatsubaraMesh(temperature(F0), nK1 * mΠν_factor, Fermion)
         Π0pp = MeshFunction(mΠΩ, mΠν; data_t=Q)
@@ -175,17 +200,17 @@ mutable struct ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
         Πph = copy(Π0pp)
         bubbles!(Πpp, Πph, G)
 
-        # channel-decomposed two-particle vertex
+        # target vertex: F0 plus three zero channels; BSE output buffer
         F = VT(F0, T, nK1, nK2, nK3)
         Fbuff = Vertex(RefVertex(T, 0.0, Q), T, nK1, nK2, nK3)
 
-        # Vertices for the SDE
+        # SDE kernels, shaped like a K2 class
         Lpp = copy(F.γp.K2)
         Lph = copy(Lpp)
         L0pp = copy(Lpp)
         L0ph = copy(Lpp)
 
-        # symmetry groups
+        # placeholder symmetry groups (no symmetries); init_sym_grp! sets the real ones
         SGΣ = SymmetryGroup(Σ)
         SGpp = SymmetryGroup[SymmetryGroup(F.γp.K1), SymmetryGroup(F.γp.K2), SymmetryGroup(F.γp.K3)]
         SGph = SymmetryGroup[SymmetryGroup(F.γp.K1), SymmetryGroup(F.γp.K2), SymmetryGroup(F.γp.K3)]
@@ -211,6 +236,7 @@ mutable struct ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
         cache_Fa  = copy(F.γp.K3)
         cache_Ft  = copy(F.γp.K3)
 
+        # FL starts as a copy of the (zero) buffer Fbuff
         return new{Q, typeof(F), RefVT}(Gbare, G0, Π0pp, Π0ph, Σ0, F0, G, Πpp, Πph, Σ, F, Fbuff, copy(Fbuff),
         Lpp, Lph, L0pp, L0ph,
         SGΣ, SGpp, SGph, SGppL, SGphL, SG0pp2, SG0ph2, mode, cache_Γpx, cache_F0p, cache_F0a,
@@ -219,6 +245,7 @@ mutable struct ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
 end
 
 
+# Printing: type, U, temperature and the box sizes.
 function Base.show(io::IO, S::AbstractSolver{Q}) where {Q}
     print(io, "$(nameof(typeof(S))){$Q}, U = $(real(bare_vertex(S.F0, aCh, pSp))), T = $(temperature(S))\n")
     print(io, "F0 K3 : $(numK3(S.F0))\n")
@@ -227,8 +254,21 @@ function Base.show(io::IO, S::AbstractSolver{Q}) where {Q}
     print(io, "F  K3 : $(numK3(S.F))")
 end
 
+# -----------------------------------------------------------------------------
+# Parquet approximation for the Anderson impurity model
+# -----------------------------------------------------------------------------
 
-# Construct for parquet approximation
+"""
+    parquet_solver_siam_parquet_approximation(nG, nK1, nK2, nK3, Q = ComplexF64; e, Δ, D, T, U, mode = :threads, mΠν_factor = 6, VT = Vertex) -> ParquetSolver
+
+Solver for the parquet approximation (PA) of the Anderson impurity model: the
+fully irreducible vertex is replaced by the bare U. This is the fd setup with
+the bare reference g = σ = 0, f = U (Lihm 2025, text below Eq. (6)).
+
+`nG` is the number of positive frequencies of G and Σ; `e`, `Δ`, `D` define
+the bath (see [`siam_bare_Green`](@ref)); `T` is the temperature and `U` the
+interaction.
+"""
 function parquet_solver_siam_parquet_approximation(
     nG::Int64,
     nK1::Int64,
@@ -261,7 +301,22 @@ function parquet_solver_siam_parquet_approximation(
     ParquetSolver(nK1, nK2, nK3, Gbare, G0, Σ0, F0, VT; mode, mΠν_factor)
 end
 
-# symmetry group initialization
+# -----------------------------------------------------------------------------
+# Symmetry groups
+# -----------------------------------------------------------------------------
+
+"""
+    init_sym_grp!(S::ParquetSolver) -> nothing
+
+Build the symmetry groups of the solver from the symmetries in symmetries.jl.
+Call this once before solving.
+
+- `SGΣ`: complex conjugation of Σ.
+- `SGpp`, `SGph`: K1, K2, K3 of the p channel and of the a and t channels.
+- `SGppL`, `SGphL`: the same for the left part FL, but without the ν ↔ ν′ swap
+  in K3, because FL = Ĩ π f is not symmetric under ν ↔ ν′.
+- `SG0pp2`, `SG0ph2`: the reference SDE kernels.
+"""
 function init_sym_grp!(
     S::ParquetSolver{Q}
     )::Nothing where {Q}
@@ -285,7 +340,8 @@ function init_sym_grp!(
     S.SGphL[2] = S.SGph[2]
     S.SGphL[3] = my_SymmetryGroup([Symmetry{3}(w -> sK3ph1(w, Q)), Symmetry{3}(w -> sK3ph3(w, Q))], S.F.γt.K3)
 
-    # For F0
+    # For the reference SDE kernels. (SG0ph2 is built on L0pp, which has the
+    # same mesh as L0ph.)
     S.SG0pp2 = my_SymmetryGroup([Symmetry{2}(w -> sK2pp1(w, Q)), Symmetry{2}(w -> sK2pp2(w, Q))], S.L0pp)
     S.SG0ph2 = my_SymmetryGroup([Symmetry{2}(w -> sK2ph1(w, Q)), Symmetry{2}(w -> sK2ph2(w, Q))], S.L0pp)
 
@@ -293,6 +349,13 @@ function init_sym_grp!(
 end
 
 
+"""
+    reset_sym_grp!(S::AbstractSolver) -> nothing
+
+Replace the symmetry groups of Σ and of the channels by trivial ones, which
+contain no symmetry (every point is computed). Not called anywhere in the
+package; useful for checking the symmetries.
+"""
 function reset_sym_grp!(S :: AbstractSolver)
     (; F, Σ) = S
 
@@ -305,6 +368,14 @@ function reset_sym_grp!(S :: AbstractSolver)
     return nothing
 end
 
+"""
+    symmetrize_solver!(S::AbstractSolver; verbose = false) -> (; S, err_list)
+
+Impose the symmetries on Σ and on K1, K2, K3 of all three channels of `S.F`,
+in place. `err_list` holds, for each object, the largest change made, i.e.
+how strongly the symmetry was violated. Used after interpolation and in the
+preconditioned solver.
+"""
 function symmetrize_solver!(S :: AbstractSolver; verbose = false)
     err_list = [S.SGΣ(S.Σ)]
     for Ch in (aCh, pCh, tCh)
@@ -320,8 +391,15 @@ function symmetrize_solver!(S :: AbstractSolver; verbose = false)
     return (; S, err_list)
 end
 
+# -----------------------------------------------------------------------------
+# Getters
+# -----------------------------------------------------------------------------
 
-# getter methods
+"""
+    temperature(S::AbstractSolver) -> Float64
+
+Temperature T = 1/β of the solver.
+"""
 function MatsubaraFunctions.temperature(
     S::AbstractSolver
     )::Float64
@@ -329,13 +407,28 @@ function MatsubaraFunctions.temperature(
     return MatsubaraFunctions.temperature(S.F)
 end
 
+# Box sizes: positive frequencies of G, Σ and of the K1, K2, K3 classes.
 numG(S::AbstractSolver)::Int64 = N(meshes(S.G, Val(1)))
 numΣ(S::AbstractSolver)::Int64 = N(meshes(S.Σ, Val(1)))
 numK1(S::AbstractSolver)::Int64 = numK1(S.F)
 numK2(S::AbstractSolver)::NTuple{2,Int64} = numK2(S.F)
 numK3(S::AbstractSolver)::NTuple{2,Int64} = numK3(S.F)
 
-# flattening and unflattening of solver
+# -----------------------------------------------------------------------------
+# Conversion to a flat vector
+# -----------------------------------------------------------------------------
+# The unknowns of the fixed-point problem are the three channels of F and the
+# self-energy, written as one vector [F channels; Σ] (solve.jl, mfRG.jl).
+
+"""
+    flatten(S::AbstractSolver) -> Vector
+    flatten!(S::AbstractSolver, x) -> nothing
+    unflatten!(S::AbstractSolver, x) -> nothing
+
+Convert between the solver's unknowns and one vector: first the three channels
+of `S.F` (see `flatten` for vertices), then `S.Σ`. `unflatten!` writes a vector
+back into `S.F` and `S.Σ`.
+"""
 function MatsubaraFunctions.flatten(
     S::AbstractSolver{Q}
 )::Vector{Q} where {Q}
@@ -343,6 +436,7 @@ function MatsubaraFunctions.flatten(
     return vcat(flatten(S.F), flatten(S.Σ))
 end
 
+# flatten! of a solver, see the docstring above
 function MatsubaraFunctions.flatten!(
     S::AbstractSolver{Q},
     x::Vector{Q}
@@ -355,6 +449,7 @@ function MatsubaraFunctions.flatten!(
     return nothing
 end
 
+# unflatten! of a solver, see the docstring above
 function MatsubaraFunctions.unflatten!(
     S::AbstractSolver{Q},
     x::Vector{Q}
@@ -367,7 +462,17 @@ function MatsubaraFunctions.unflatten!(
     return nothing
 end
 
-# save solver to HDF5
+# -----------------------------------------------------------------------------
+# Saving and the switched-off symmetrization
+# -----------------------------------------------------------------------------
+
+"""
+    save!(f, label, S::AbstractSolver) -> nothing
+
+Write the solver to the HDF5 file `f`: the bare propagator, the reference
+system (`G0`, `Σ0`, `F0`, `Π0pp`, `Π0ph`) and the target system (`G`, `Σ`, `F`,
+`Πpp`, `Πph`), each as a top-level group. `label` is not used.
+"""
 function MatsubaraFunctions.save!(
     f::HDF5.File,
     label::String,
@@ -391,6 +496,13 @@ function MatsubaraFunctions.save!(
     return nothing
 end
 
+"""
+    my_symmetrize!(S::AbstractSolver)
+
+Apply [`my_symmetrize!`](@ref) to every class of the three channels. That
+scheme is switched off (`zero_out.jl`), so this changes nothing. Not called
+anywhere.
+"""
 function my_symmetrize!(S :: AbstractSolver)
     my_symmetrize!(S.F.γp.K1, S.SGpp[1])
     my_symmetrize!(S.F.γp.K2, S.SGpp[2])
