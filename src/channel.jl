@@ -1,54 +1,73 @@
-# channel.jl
+# =============================================================================
+# One channel's reducible vertex Φ_r in the asymptotic decomposition (local).
 #
-# Φ_r = γ_r (paper vs. code notation)
+# The vertex Φ_r reducible in channel r ∈ {a, p, t} depends on three
+# frequencies (Ω, ν, ν′), given in channel r's parametrization (convention.jl).
+# Storing it on a large three-dimensional grid is too expensive. Instead, Φ_r is
+# split by how it behaves when the fermionic frequencies become large (Lihm
+# 2025, Eq. (S7)):
 #
-# Defines the asymptotic decomposition of the 2-particle reducible vertex Φ_r in a single
-# diagrammatic channel r ∈ {a, p, t} (antiparallel, parallel, transverse-antiparallel).
+#   Φ_r(Ω, ν, ν′) = K1_r(Ω) + K2_r(Ω, ν) + K̄2_r(Ω, ν′) + K3_r(Ω, ν, ν′)
 #
-# The storage of Φ_r is made tractable by the asymptotic (K1/K2/K3) decomposition,
-# which exploits the frequency decay of Φ_r(Ω, ν, ν') as ν or ν' → ∞:
+#   K1   what remains for ν, ν′ → ∞; depends only on the bosonic Ω. It is
+#        proportional to the susceptibility of the channel (Eq. (S19a)).
+#   K2   what remains for ν′ → ∞, minus K1. It is tied to the three-leg
+#        (Hedin) vertex (Eq. (S19c)).
+#   K̄2   the same for ν → ∞. It is not stored: by the ν ↔ ν′ symmetry of the
+#        vertex, K̄2(Ω, ν′) = K2(Ω, ν′), read from the K2 array.
+#   K3   the rest. It decays in every frequency direction.
 #
-#   Φ_r(Ω, ν, ν') ≈ K1_r(Ω) + K2_r(Ω, ν) + K2'_r(Ω, ν') + K3_r(Ω, ν, ν')
+# Each class is stored on its own frequency box, with numK1 ≥ numK2 ≥ numK3
+# positive frequencies, and is zero outside it. K1 and K2 have few arguments
+# and capture the slow high-frequency decay of Φ_r, so they get large boxes.
+# K3 decays fast, so a small box suffices. Cutting each class at its box is
+# the only approximation in this representation.
 #
-# where K1 retains only the bosonic frequency Ω (transfer frequency), K2 and K2' add
-# one fermionic leg each, and K3 is the remainder carrying full (Ω, ν, ν') dependence.
-# The K3 grid can be truncated at a much smaller frequency cutoff than the K2 or K1 grids.
+# Paper ↔ code: ω (bosonic) ↔ Ω; ν′ ↔ νp; K̄2 ↔ K2' (same array as K2).
+# A Channel holds one Φ_r; a vertex stores three of them in its fields
+# `γa`, `γp`, `γt` (vertex.jl). Lattice versions: nonlocal*/channel.jl.
+# =============================================================================
 
 """
-    abstract type AbstractReducibleVertex{Q}
- 
-Abstract supertype for all representations of a channel-r two-particle reducible vertex γ_r.
+    AbstractReducibleVertex{Q}
+
+Supertype of the containers for one channel's reducible vertex `Φ_r` with
+number type `Q`: the local [`Channel`](@ref) and the lattice versions
+`NL_Channel`, `NL2_Channel`, `NL3_Channel`. All of them store the asymptotic
+classes in fields `K1`, `K2`, `K3`.
 """
 abstract type AbstractReducibleVertex{Q}; end
 
-# Expose the scalar type of a reducible vertex.
+# number type of the stored data
 Base.eltype(::Type{<: AbstractReducibleVertex{Q}}) where {Q} = Q
 
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
 # Channel struct
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
 
 """
-    struct Channel{Q <: Number} <: AbstractReducibleVertex{Q}
- 
-Concrete representation of the 2-particle reducible vertex γ_r in the asymptotic
-decomposition for a single diagrammatic channel r.
- 
-The frequency mesh sizes satisfy the hierarchy `numK1 ≥ numK2 ≥ numK3` to respect the
-fact that lower-class vertices require a larger frequency window for convergence.
+    Channel{Q} <: AbstractReducibleVertex{Q}
 
-# Constructors
-- `Channel(K1, K2, K3)`: Construct directly from pre-allocated `MeshFunction` objects.
-  No consistency checks are performed.
-- `Channel(T, numK1, numK2, numK3)`: Zero-initialize from mesh size parameters.
-  Enforces the hierarchy `numK1 ≥ numK2 ≥ numK3`.
+The reducible vertex `Φ_r` of one channel, without momentum dependence, stored
+as its asymptotic classes (Lihm 2025, Eq. (S7)):
+
+- `K1`: K1(Ω), on a bosonic mesh with `numK1` positive frequencies.
+- `K2`: K2(Ω, ν), on a (bosonic, fermionic) mesh of size `numK2`. Also used
+  for K̄2(Ω, ν′).
+- `K3`: K3(Ω, ν, ν′), on a (bosonic, fermionic, fermionic) mesh of size
+  `numK3`; ν and ν′ share one fermionic mesh.
+
+Constructors:
+- `Channel(K1, K2, K3)`: from existing mesh functions, without checks.
+- `Channel(T, numK1, numK2, numK3, Q = ComplexF64)`: all classes zero, at
+  temperature `T`. Checks `numK1 ≥ numK2 ≥ numK3`.
 """
 struct Channel{Q <: Number} <: AbstractReducibleVertex{Q}
     K1 :: MF_K1{Q}
     K2 :: MF_K2{Q}
     K3 :: MF_K3{Q}
 
-    # Constructor from pre-allocated MeshFunctions.
+    # Constructor from existing mesh functions.
     function Channel(
         K1 :: MF_K1{Q},
         K2 :: MF_K2{Q},
@@ -58,7 +77,7 @@ struct Channel{Q <: Number} <: AbstractReducibleVertex{Q}
         return new{Q}(K1, K2, K3)
     end
 
-    # Constructor from temperature and mesh sizes.
+    # Constructor from temperature and box sizes; all classes start at zero.
     function Channel(
         T     :: Float64,
         numK1 :: Int64,
@@ -67,23 +86,23 @@ struct Channel{Q <: Number} <: AbstractReducibleVertex{Q}
               :: Type{Q} = ComplexF64,
         ) where {Q}
 
-        # K1: depends only on bosonic transfer frequency Ω
-        mK1Ω = MatsubaraMesh(T, numK1, Boson) # bosonic mesh for transfer frequency Ω, 2*numK1 - 1 Ω-points
+        # K1: depends only on the bosonic frequency Ω
+        mK1Ω = MatsubaraMesh(T, numK1, Boson) # bosonic mesh for Ω, 2*numK1 - 1 points
         K1 = MeshFunction(mK1Ω; data_t = Q)
         set!(K1, 0)
 
         # K2: depends on (Ω, ν)
         @assert numK1 >= numK2[1] "No. bosonic frequencies in K1 must be larger than no. bosonic frequencies in K2"
         @assert numK1 >= numK2[2] "No. bosonic frequencies in K1 must be larger than no. fermionic frequencies in K2"
-        mK2Ω = MatsubaraMesh(T, numK2[1], Boson)    # bosonic mesh for transfer frequency Ω, 2*numK2[1] - 1 Ω-points
-        mK2ν = MatsubaraMesh(T, numK2[2], Fermion)  # fermionic mesh for frequency ν, 2*numK2[2] ν-points
+        mK2Ω = MatsubaraMesh(T, numK2[1], Boson)    # bosonic mesh for Ω, 2*numK2[1] - 1 points
+        mK2ν = MatsubaraMesh(T, numK2[2], Fermion)  # fermionic mesh for ν, 2*numK2[2] points
         K2   = MeshFunction(mK2Ω, mK2ν; data_t = Q)
         set!(K2, 0)
 
-        # K3: depends on (Ω, ν, ν'); symmetric in the two fermionic legs (same mesh for both)
+        # K3: depends on (Ω, ν, ν′); ν and ν′ use the same mesh
         @assert all(numK2 .>= numK3) "Number of frequencies in K2 must be larger than in K3"
-        mK3Ω = MatsubaraMesh(T, numK3[1], Boson)    # bosonic mesh for transfer frequency Ω, 2*numK3[1] - 1 Ω-points
-        mK3ν = MatsubaraMesh(T, numK3[2], Fermion)  # fermionic mesh for frequencies ν, ν', 2*numK3[2] ν-points
+        mK3Ω = MatsubaraMesh(T, numK3[1], Boson)    # bosonic mesh for Ω, 2*numK3[1] - 1 points
+        mK3ν = MatsubaraMesh(T, numK3[2], Fermion)  # fermionic mesh for ν and ν′, 2*numK3[2] points
         K3   = MeshFunction(mK3Ω, mK3ν, mK3ν; data_t = Q)
         set!(K3, 0)
 
@@ -91,15 +110,14 @@ struct Channel{Q <: Number} <: AbstractReducibleVertex{Q}
     end
 end
 
-# --------------------------------------------------------------------------- #
-# Getter methods
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
+# Getters
+# -----------------------------------------------------------------------------
 
 """
     temperature(γ::AbstractReducibleVertex) -> Float64
- 
-Return the temperature `T` of the Matsubara grid underlying the reducible vertex,
-extracted from the bosonic mesh of K1.
+
+Temperature T = 1/β of the Matsubara meshes, read from the K1 mesh.
 """
 function MatsubaraFunctions.temperature(
     γ :: AbstractReducibleVertex
@@ -110,8 +128,8 @@ end
 
 """
     numK1(γ::AbstractReducibleVertex) -> Int64
- 
-Return the number of positive bosonic Matsubara frequencies in the K1 mesh.
+
+Number of positive bosonic frequencies in the K1 box.
 """
 function numK1(
     γ :: AbstractReducibleVertex
@@ -121,9 +139,9 @@ function numK1(
 end
 
 """
-    numK2(γ::AbstractReducibleVertex) -> NTuple{2, Int64}
- 
-Return the number of positive (bosonic, fermionic) Matsubara frequencies in the K2 mesh.
+    numK2(γ::AbstractReducibleVertex) -> (nΩ, nν)
+
+Number of positive bosonic and fermionic frequencies in the K2 box.
 """
 function numK2(
     γ :: AbstractReducibleVertex
@@ -133,10 +151,10 @@ function numK2(
 end
 
 """
-    numK3(γ::AbstractReducibleVertex) -> NTuple{2, Int64}
- 
-Return the number of positive (bosonic, fermionic) Matsubara frequencies used in the K3 asymptotic class.
-The same fermionic mesh is used for both incoming and outgoing fermionic legs ν and ν'.
+    numK3(γ::AbstractReducibleVertex) -> (nΩ, nν)
+
+Number of positive bosonic and fermionic frequencies in the K3 box. ν and ν′
+share the same fermionic mesh.
 """
 function numK3(
     γ :: AbstractReducibleVertex
@@ -145,15 +163,16 @@ function numK3(
     return N(meshes(γ.K3, Val(1))), N(meshes(γ.K3, Val(2)))
 end
 
-# --------------------------------------------------------------------------- #
-# Setter methods
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
+# Setters
+# -----------------------------------------------------------------------------
 
 """
-    set!(γ1::AbstractReducibleVertex, γ2::AbstractReducibleVertex) -> Nothing
- 
-Copy all asymptotic classes (K1, K2, K3) from `γ2` into `γ1` in-place.
-Meshes must be compatible.
+    set!(γ1::AbstractReducibleVertex, γ2::AbstractReducibleVertex) -> nothing
+    set!(γ1::AbstractReducibleVertex, val::Number) -> nothing
+
+Overwrite K1, K2 and K3 of `γ1` with those of `γ2` (same meshes required), or
+set every entry to the number `val`, e.g. `set!(γ, 0)`.
 """
 function MatsubaraFunctions.set!(
     γ1 :: AbstractReducibleVertex,
@@ -167,12 +186,7 @@ function MatsubaraFunctions.set!(
     return nothing
 end
 
-"""
-    set!(γ1::AbstractReducibleVertex{Q}, val::Number) -> Nothing
- 
-Set all data in K1, K2, and K3 to the constant value `val` (cast to type `Q`).
-Typically used to zero-initialize a channel: `set!(γ, 0)`.
-"""
+# set! with a number, see the docstring above
 function MatsubaraFunctions.set!(
     γ1  :: AbstractReducibleVertex{Q},
     val :: Number,
@@ -185,14 +199,14 @@ function MatsubaraFunctions.set!(
     return nothing
 end
 
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
 # Comparison
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
 
 """
     ==(γ1::AbstractReducibleVertex, γ2::AbstractReducibleVertex) -> Bool
- 
-Element-wise equality check across all three asymptotic classes K1, K2, K3.
+
+True if K1, K2 and K3 are equal entry by entry.
 """
 function Base.:(==)(
     γ1 :: AbstractReducibleVertex,
@@ -201,14 +215,14 @@ function Base.:(==)(
     return (γ1.K1 == γ2.K1) && (γ1.K2 == γ2.K2) && (γ1.K3 == γ2.K3)
 end
 
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
 # Arithmetic
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
 
 """
-    add!(γ1::AbstractReducibleVertex, γ2::AbstractReducibleVertex) -> Nothing
- 
-In-place addition `γ1 += γ2`, applied to each asymptotic class.
+    add!(γ1::AbstractReducibleVertex, γ2::AbstractReducibleVertex) -> nothing
+
+In place `γ1 += γ2`, class by class.
 """
 function MatsubaraFunctions.add!(
     γ1 :: AbstractReducibleVertex,
@@ -223,10 +237,9 @@ function MatsubaraFunctions.add!(
 end
 
 """
-    mult_add!(γ1::AbstractReducibleVertex, γ2::AbstractReducibleVertex, val::Number) -> Nothing
- 
-In-place multiply-add `γ1 += val * γ2`, applied to each asymptotic class.
-Useful in iterative solvers and self-consistency loops (e.g., mixing updates).
+    mult_add!(γ1::AbstractReducibleVertex, γ2::AbstractReducibleVertex, val) -> nothing
+
+In place `γ1 += val * γ2`, class by class.
 """
 function MatsubaraFunctions.mult_add!(
     γ1 :: AbstractReducibleVertex,
@@ -241,16 +254,16 @@ function MatsubaraFunctions.mult_add!(
     return nothing
 end
 
-# --------------------------------------------------------------------------- #
-# Length of channel
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
+# Size, norm and conversion to a flat vector
+# -----------------------------------------------------------------------------
+# The nonlinear solvers (solve.jl, mfRG.jl) see the vertex as one long vector
+# of unknowns. flatten / unflatten! convert between the two forms.
 
 """
     length(γ::AbstractReducibleVertex) -> Int64
- 
-Return the total number of scalar data elements stored across all three asymptotic classes.
-This equals `|K1| + |K2| + |K3|` where each term is the product of the respective mesh sizes.
-E.g. `|K2| = mK2Ω * mK2ν`
+
+Total number of stored values: the sizes of the K1, K2 and K3 arrays added.
 """
 function Base.length(
     γ :: AbstractReducibleVertex
@@ -259,15 +272,10 @@ function Base.length(
     return length(γ.K1.data) + length(γ.K2.data) + length(γ.K3.data)
 end
 
-# --------------------------------------------------------------------------- #
-# Maximum absolute value
-# --------------------------------------------------------------------------- #
-
 """
     absmax(γ::AbstractReducibleVertex) -> Float64
- 
-Return the maximum absolute value across all elements of K1, K2, and K3.
-Used as a convergence diagnostic in self-consistency iterations.
+
+Largest absolute value over K1, K2 and K3. Used to monitor convergence.
 """
 function MatsubaraFunctions.absmax(
     γ :: AbstractReducibleVertex
@@ -276,15 +284,11 @@ function MatsubaraFunctions.absmax(
     return max(absmax(γ.K1), absmax(γ.K2), absmax(γ.K3))
 end
 
-# --------------------------------------------------------------------------- #
-# Flatten into vector / Unflatten from vector
-# --------------------------------------------------------------------------- #
-
 """
-    flatten!(γ::AbstractReducibleVertex, x::AbstractVector) -> Nothing
- 
-Write all vertex data (K1, then K2, then K3 in order) into the preallocated flat vector `x` in-place.
-The layout is: `x[1:lenK1] = K1`, `x[lenK1+1:lenK1+lenK2] = K2`, etc.
+    flatten!(γ::AbstractReducibleVertex, x) -> nothing
+
+Write all data into the vector `x`: first K1, then K2, then K3. The length of
+`x` must equal `length(γ)`.
 """
 function MatsubaraFunctions.flatten!(
     γ :: AbstractReducibleVertex,
@@ -311,10 +315,9 @@ function MatsubaraFunctions.flatten!(
 end
 
 """
-    flatten(γ::AbstractReducibleVertex{Q}) -> Vector{Q}
- 
-Allocate and return a flat vector containing all vertex data (K1, K2, K3 in order).
-See also `flatten!` for the in-place variant.
+    flatten(γ::AbstractReducibleVertex) -> Vector
+
+All data in one new vector, in the order K1, K2, K3 (see `flatten!`).
 """
 function MatsubaraFunctions.flatten(
     γ :: AbstractReducibleVertex{Q}
@@ -327,10 +330,9 @@ function MatsubaraFunctions.flatten(
 end
 
 """
-    unflatten!(γ::AbstractReducibleVertex, x::AbstractVector) -> Nothing
- 
-Read vertex data back from the flat vector `x` (in the same layout as `flatten!`) and
-write it into K1, K2, K3 in-place. Inverse of `flatten!`.
+    unflatten!(γ::AbstractReducibleVertex, x) -> nothing
+
+Read K1, K2 and K3 back from the vector `x`, written by `flatten!`.
 """
 function MatsubaraFunctions.unflatten!(
     γ :: AbstractReducibleVertex,
@@ -356,14 +358,14 @@ function MatsubaraFunctions.unflatten!(
     return nothing
 end
 
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
 # Copy
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
 
 """
-    copy(γ::Channel{Q}) -> Channel{Q}
- 
-Return a copy of the channel, allocating new arrays for K1, K2, and K3.
+    copy(γ::Channel) -> Channel
+
+Independent copy, with new arrays for K1, K2 and K3.
 """
 function Base.:copy(
     γ :: Channel{Q}
@@ -371,37 +373,31 @@ function Base.:copy(
     return Channel(copy(γ.K1), copy(γ.K2), copy(γ.K3))
 end
 
-# --------------------------------------------------------------------------- #
-# Evaluators 
-# --------------------------------------------------------------------------- #
-#
-# The call operator evaluates the full reducible vertex
-#
-#   γ_r(Ω, ν, ν') = K1(Ω) + K2(Ω, ν) + K2'(Ω, ν') + K3(Ω, ν, ν')
-#
-# using the asymptotic decomposition. The individual contributions can be toggled via
-# keyword arguments `K1`, `K2`, `K3` (all default to `true`).
-#
-# Note that K2'(Ω, ν') is stored in the same array as K2 and is evaluated as `K2[Ω, νp]`.
-# Hence a single call may contribute both K2(Ω,ν) and K2'(Ω,ν') from the same field.
-#
-# All evaluations return zero for frequencies outside the stored mesh range, implementing
-# the implicit truncation of the asymptotic expansion at the grid boundary.
-#
-# Four overloads handle combinations of finite and infinite (ν → ∞) fermionic frequencies,
-# since InfiniteMatsubaraFrequency propagates analytically through the K-class hierarchy.
+# -----------------------------------------------------------------------------
+# Evaluation
+# -----------------------------------------------------------------------------
+# A Channel is called like a function to get Φ_r at given frequencies. There
+# are four methods: ν and ν′ can each be finite or νInf (infinite).
 
 """
-    (γ::Channel{Q})(Ω, ν, νp; K1=true, K2=true, K3=true) -> Q
- 
-Evaluate γ_r(Ω, ν, ν') for finite Matsubara frequencies Ω (bosonic), ν, ν' (fermionic).
- 
-The result accumulates contributions from the active asymptotic classes:
-- K1(Ω)               if `K1=true` and Ω is within the K1 bosonic mesh.
-- K2(Ω,ν) + K2'(Ω,ν') if `K2=true` and the respective frequencies are in-bounds.
-- K3(Ω,ν,ν')          if `K3=true` and both fermionic frequencies are in-bounds.
- 
-Out-of-bounds frequencies return zero, consistent with the high-frequency decay of γ_r.
+    (γ::Channel)(Ω, ν, νp; K1 = true, K2 = true, K3 = true) -> value
+
+Evaluate the reducible vertex of this channel at frequencies given in the
+channel's own parametrization (Lihm 2025, Eq. (S7)):
+
+    Φ_r(Ω, ν, ν′) = K1(Ω) + K2(Ω, ν) + K̄2(Ω, ν′) + K3(Ω, ν, ν′)
+
+K̄2 is read from the K2 array. A class whose arguments lie outside its box
+contributes zero. The keywords `K1`, `K2`, `K3` switch single classes off (`K2`
+covers K2 and K̄2).
+
+`ν` and/or `νp` may be [`νInf`](@ref). The classes that need that frequency to
+be finite then drop out, which gives the high-frequency limits used in the
+Bethe-Salpeter equations (Eq. (S22)):
+
+    Φ_r(Ω, ∞, ν′) = K1(Ω) + K̄2(Ω, ν′)
+    Φ_r(Ω, ν, ∞)  = K1(Ω) + K2(Ω, ν)
+    Φ_r(Ω, ∞, ∞)  = K1(Ω)
 """
 @inline function (γ :: Channel{Q})(
     Ω  :: MatsubaraFrequency,
@@ -420,7 +416,7 @@ Out-of-bounds frequencies return zero, consistent with the high-frequency decay 
         # add K1[Ω] if K1=true
         K1 && (val += γ.K1[Ω])
 
-        # check if Ω is in-bounds for K1. Nested because numK1 >= numK2
+        # check if Ω is in-bounds for K2. Nested because numK1 >= numK2
         if is_inbounds(Ω, meshes(γ.K2, Val(1)))
 
             # check if ν, ν' are in-bounds for K2
@@ -428,7 +424,7 @@ Out-of-bounds frequencies return zero, consistent with the high-frequency decay 
             ν2_inbounds = is_inbounds(νp, meshes(γ.K2, Val(2)))
 
             if ν1_inbounds && ν2_inbounds
-                # Both fermionic arguments in range: add K2(Ω,ν) + K2'(Ω,ν') + K3(Ω,ν,ν') if K2=true and K3=true respectively
+                # Both fermionic arguments in range: add K2(Ω,ν) + K̄2(Ω,ν′) + K3(Ω,ν,ν′) if K2=true and K3=true respectively
                 K2 && (val += γ.K2[Ω, ν] + γ.K2[Ω, νp])
                 K3 && (val += γ.K3(Ω, ν, νp)) # bounds check for Ω, ν, νp handled in MeshFunction()
 
@@ -437,7 +433,7 @@ Out-of-bounds frequencies return zero, consistent with the high-frequency decay 
                 K2 && (val += γ.K2[Ω, ν])
 
             elseif ν2_inbounds
-                # Only ν' in range: add K2'(Ω, ν') if K2=true
+                # Only ν′ in range: add K̄2(Ω, ν′) if K2=true
                 K2 && (val += γ.K2[Ω, νp])
             end
         end
@@ -446,14 +442,7 @@ Out-of-bounds frequencies return zero, consistent with the high-frequency decay 
     return val
 end
 
-"""
-    (γ::Channel{Q})(Ω, ν::InfiniteMatsubaraFrequency, νp; K1, K2, K3) -> Q
- 
-Evaluate γ_r(Ω, ∞, ν') — asymptotic limit as the incoming fermionic frequency ν → ∞.
- 
-In this limit, K2(Ω, ν) and K3(Ω, ν, ν') vanish, leaving only K1(Ω) and K2'(Ω, ν').
-This overload is used when computing asymptotic corrections in BSE or SDE kernels.
-"""
+# Method for ν = ∞: only K1(Ω) + K̄2(Ω, ν′) remain.
 @inline function (γ :: Channel{Q})(
     Ω  :: MatsubaraFrequency,
     ν  :: InfiniteMatsubaraFrequency,
@@ -484,14 +473,7 @@ This overload is used when computing asymptotic corrections in BSE or SDE kernel
     return val
 end
 
-"""
-    (γ::Channel{Q})(Ω, ν, νp::InfiniteMatsubaraFrequency; K1, K2, K3) -> Q
- 
-Evaluate γ_r(Ω, ν, ∞) — asymptotic limit as the outgoing fermionic frequency ν' → ∞.
- 
-In this limit, K2'(Ω, ν') and K3(Ω, ν, ν') vanish, leaving only K1(Ω) and K2(Ω, ν).
-Symmetric counterpart to the ν → ∞ overload above.
-"""
+# Method for ν′ = ∞: only K1(Ω) + K2(Ω, ν) remain.
 @inline function (γ :: Channel{Q})(
     Ω  :: MatsubaraFrequency,
     ν  :: MatsubaraFrequency,
@@ -522,15 +504,8 @@ Symmetric counterpart to the ν → ∞ overload above.
     return val
 end
 
- 
-"""
-    (γ::Channel{Q})(Ω, ν::InfiniteMatsubaraFrequency, νp::InfiniteMatsubaraFrequency; K1, K2, K3) -> Q
- 
-Evaluate γ_r(Ω, ∞, ∞) — double asymptotic limit ν, ν' → ∞.
- 
-In this limit, all K2 and K3 contributions vanish, leaving only K1(Ω). This is the
-leading high-frequency behavior of the reducible vertex.
-"""
+
+# Method for ν = ν′ = ∞: only K1(Ω) remains.
 @inline function (γ :: Channel{Q})(
     Ω  :: MatsubaraFrequency,
     ν  :: InfiniteMatsubaraFrequency,
@@ -550,28 +525,28 @@ leading high-frequency behavior of the reducible vertex.
     return val
 end
 
-
-# --------------------------------------------------------------------------- #
-# Reducer
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
+# From cumulative to separate classes
+# -----------------------------------------------------------------------------
 
 """
-    reduce!(γ::Channel) -> Nothing
- 
-Subtract the lower-order asymptotic contributions from the higher-order classes in-place,
-converting from "cumulative" to "pure" (reduced) asymptotic classes:
- 
-  K2_reduced(Ω, ν)      = K2(Ω, ν) − K1(Ω)
-  K3_reduced(Ω, ν, ν')  = K3(Ω, ν, ν') − K1(Ω) − K2_reduced(Ω, ν) − K2'_reduced(Ω, ν')
- 
-After this operation, each class stores only the increment not captured by the lower
-classes.
+    reduce!(γ::Channel) -> nothing
+
+Turn "cumulative" classes into the separate classes of Eq. (S7), in place.
+Before the call, K2 holds the full limit `Φ_r(Ω, ν, ∞) = K1 + K2` and K3 holds
+`Φ_r` itself. Afterwards
+
+    K2(Ω, ν)     ← K2(Ω, ν) - K1(Ω)
+    K3(Ω, ν, ν′) ← K3(Ω, ν, ν′) - K1(Ω) - K2(Ω, ν) - K2(Ω, ν′)
+
+(the last line uses the already reduced K2). Not used by the solvers; the
+tests use it to build channels from a known `Φ_r`.
 """
 function reduce!(
     γ :: Channel
     ) :: Nothing
 
-    # Subtract K1(Ω) from K2(Ω, ν) for all ν on the K2 fermionic mesh
+    # K2(Ω, ν) -= K1(Ω) on the K2 box
     for iΩ in eachindex(meshes(γ.K2, Val(1)))
         Ω = value(meshes(γ.K2, Val(1))[iΩ])
         K1val = γ.K1[Ω]
@@ -582,7 +557,7 @@ function reduce!(
         end
     end
 
-    # Subtract K1(Ω) + K2_reduced(Ω, ν) + K2'_reduced(Ω, ν') from K3(Ω, ν, ν') for all ν, ν' on the K3 mesh
+    # K3(Ω, ν, ν′) -= K1(Ω) + K2(Ω, ν) + K̄2(Ω, ν′) on the K3 box
     for iΩ in eachindex(meshes(γ.K3, Val(1)))
         Ω = value(meshes(γ.K3, Val(1))[iΩ])
         K1val = γ.K1[Ω]
@@ -601,15 +576,14 @@ function reduce!(
     return nothing
 end
 
-# --------------------------------------------------------------------------- #
-# HDF5 I/O
-# --------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
+# HDF5 input and output
+# -----------------------------------------------------------------------------
 
 """
-    save!(file::HDF5.File, label::String, γ::AbstractReducibleVertex) -> Nothing
- 
-Save the three asymptotic classes K1, K2, K3 of a reducible vertex to an HDF5 file
-under the group `label/K1`, `label/K2`, and `label/K3`, respectively.
+    save!(file, label, γ::AbstractReducibleVertex) -> nothing
+
+Write K1, K2 and K3 to the HDF5 groups `label/K1`, `label/K2`, `label/K3`.
 """
 function MatsubaraFunctions.save!(
     file  :: HDF5.File,
@@ -625,11 +599,10 @@ function MatsubaraFunctions.save!(
 end
 
 """
-    load_channel(::Type{T}, file::HDF5.File, label::String) -> T
- 
-Load a reducible vertex of concrete type `T <: AbstractReducibleVertex` from an HDF5 file.
-The K1, K2, K3 `MeshFunction`s are read from `label/K1`, `label/K2`, `label/K3`
-and passed to the `T(K1, K2, K3)` constructor.
+    load_channel(T, file, label) -> T
+
+Read K1, K2 and K3 from the groups below `label` (written by `save!`) and build
+a channel of type `T`, e.g. `Channel` or `NL2_Channel`.
 """
 function load_channel(
           :: Type{T},
