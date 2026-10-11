@@ -1,10 +1,41 @@
-# 2-particle reducible vertex in the asymptotic decomposition
+# =============================================================================
+# One channel's reducible vertex Φ_r on the lattice, s-wave solver NL.
+#
+# Same asymptotic decomposition as the local Channel (channel.jl; Lihm 2025,
+# Eq. (S7)), now with momentum. In the s-wave approximation (Eqs. (S17)-(S18))
+# every class keeps only the bosonic (transfer) momentum q of the channel and
+# is averaged over the fermionic momenta k, k′:
+#
+#   Φ_r(Ω, ν, ν′; q) = K1(Ω; q) + K2(Ω, ν; q) + K̄2(Ω, ν′; q) + K3(Ω, ν, ν′; q)
+#
+# with K̄2(Ω, ν′; q) read from the K2 array. When the momentum is the marker kSW
+# (averaged), indexing returns the average over q (nonlocal/swave.jl).
+#
+# The file also lets the local objects (Channel, RefVertex, Vertex) be called
+# with momentum arguments, which they ignore. That is how the local DMFT vertex
+# serves as the reference vertex f of a lattice calculation.
+#
+# Paper ↔ code: q ↔ P; k, k′ ↔ k, kp; ω ↔ Ω; ν′ ↔ νp.
+# =============================================================================
 
+"""
+    NL_Channel{Q} <: AbstractReducibleVertex{Q}
+
+The reducible vertex `Φ_r` of one channel in the s-wave approximation (Lihm 2025,
+Eq. (S17)): `K1(Ω, q)`, `K2(Ω, ν, q)` and `K3(Ω, ν, ν′, q)`, each depending only
+on the bosonic momentum q of the channel.
+
+Constructors:
+- `NL_Channel(K1, K2, K3)`: from existing mesh functions.
+- `NL_Channel(T, numK1, numK2, numK3, meshK, Q = ComplexF64)`: all classes zero,
+  with the given frequency boxes and the bosonic momentum mesh `meshK`.
+"""
 struct NL_Channel{Q <: Number} <: AbstractReducibleVertex{Q}
     K1 :: NL_MF_K1{Q}
     K2 :: NL_MF_K2{Q}
     K3 :: NL_MF_K3{Q}
 
+    # from existing mesh functions
     function NL_Channel(
         K1 :: NL_MF_K1{Q},
         K2 :: NL_MF_K2{Q},
@@ -14,6 +45,7 @@ struct NL_Channel{Q <: Number} <: AbstractReducibleVertex{Q}
         return new{Q}(K1, K2, K3)
     end
 
+    # zero classes on the given frequency boxes and momentum mesh
     function NL_Channel(
         T     :: Float64,
         numK1 :: Int64,
@@ -23,10 +55,12 @@ struct NL_Channel{Q <: Number} <: AbstractReducibleVertex{Q}
               :: Type{Q} = ComplexF64,
         ) where {Q}
 
+        # K1(Ω, q)
         mK1Ω = MatsubaraMesh(T, numK1, Boson)
         K1 = MeshFunction(mK1Ω, meshK; data_t = Q)
         set!(K1, 0)
 
+        # K2(Ω, ν, q)
         @assert numK1 >= numK2[1] "No. bosonic frequencies in K1 must be larger than no. bosonic frequencies in K2"
         @assert numK1 >= numK2[2] "No. bosonic frequencies in K1 must be larger than no. fermionic frequencies in K2"
         mK2Ω = MatsubaraMesh(T, numK2[1], Boson)
@@ -34,6 +68,7 @@ struct NL_Channel{Q <: Number} <: AbstractReducibleVertex{Q}
         K2   = MeshFunction(mK2Ω, mK2ν, meshK; data_t = Q)
         set!(K2, 0)
 
+        # K3(Ω, ν, ν′, q)
         @assert all(numK2 .>= numK3) "Number of frequencies in K2 must be larger than in K3"
         mK3Ω = MatsubaraMesh(T, numK3[1], Boson)
         mK3ν = MatsubaraMesh(T, numK3[2], Fermion)
@@ -44,7 +79,15 @@ struct NL_Channel{Q <: Number} <: AbstractReducibleVertex{Q}
     end
 end
 
-# getter methods
+# -----------------------------------------------------------------------------
+# Getters and copy
+# -----------------------------------------------------------------------------
+
+"""
+    get_P_mesh(γ::NL_Channel) -> KMesh
+
+Mesh of the bosonic momentum q (code: P) of the channel.
+"""
 function get_P_mesh(
     γ :: NL_Channel
     ) :: KMesh
@@ -52,6 +95,11 @@ function get_P_mesh(
     return meshes(γ.K1, Val(2))
 end
 
+"""
+    numP(γ::NL_Channel) -> Int64
+
+Number of points `N_q` of the bosonic momentum mesh.
+"""
 function numP(
     γ :: NL_Channel
     ) :: Int64
@@ -59,15 +107,33 @@ function numP(
     return length(meshes(γ.K1, Val(2)))
 end
 
-# copy
+"""
+    copy(γ::NL_Channel) -> NL_Channel
+
+Independent copy, with new arrays for K1, K2 and K3.
+"""
 function Base.:copy(
     γ :: NL_Channel{Q}
     ) :: NL_Channel{Q} where {Q}
     return NL_Channel(copy(γ.K1), copy(γ.K2), copy(γ.K3))
 end
 
+# -----------------------------------------------------------------------------
+# Evaluation
+# -----------------------------------------------------------------------------
 
-# evaluator
+"""
+    (γ::NL_Channel)(Ω, ν, νp, P, k, kp; K1 = true, K2 = true, K3 = true) -> value
+    (γ::NL_Channel)(Ω, ν, νp, P; K1 = true, K2 = true, K3 = true) -> value
+
+Evaluate `Φ_r` at frequencies (Ω, ν, νp) and bosonic momentum `P` (paper: q),
+given in the channel's own parametrization:
+`K1(Ω, P) + K2(Ω, ν, P) + K̄2(Ω, νp, P) + K3(Ω, ν, νp, P)`. The fermionic
+momenta `k`, `kp` are ignored (s-wave approximation). If `P` is
+[`kSW`](@ref), each class is averaged over the bosonic momentum. As for the
+local [`Channel`](@ref), classes outside their box give zero, `νInf` gives
+the high-frequency limits, and the keywords switch classes off.
+"""
 @inline function (γ :: NL_Channel{Q})(
     Ω  :: MatsubaraFrequency,
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -87,6 +153,7 @@ end
 end
 
 
+# Method with finite ν, ν′ and the bosonic momentum only, see the docstring above.
 @inline function (γ :: NL_Channel{Q})(
     Ω  :: MatsubaraFrequency,
     ν  :: MatsubaraFrequency,
@@ -100,6 +167,7 @@ end
 
     val = zero(Q)
 
+    # index of P on the momentum mesh (folded back); stays kSW for kSW
     iP = MatsubaraFunctions.mesh_index_bc(P, get_P_mesh(γ))
 
     if is_inbounds(Ω, meshes(γ.K1, Val(1)))
@@ -110,6 +178,7 @@ end
             ν2_inbounds = is_inbounds(νp, meshes(γ.K2, Val(2)))
 
             if ν1_inbounds && ν2_inbounds
+                # K2(Ω, ν) + K̄2(Ω, ν′), and K3 if inside its box
                 K2 && (val += γ.K2[Ω, ν, iP] + γ.K2[Ω, νp, iP])
 
                 if (K3 && is_inbounds( Ω, meshes(γ.K3, Val(1))) &&
@@ -131,6 +200,7 @@ end
 end
 
 
+# Method for ν = ∞: only K1 + K̄2 remain.
 @inline function (γ :: NL_Channel{Q})(
     Ω  :: MatsubaraFrequency,
     ν  :: InfiniteMatsubaraFrequency,
@@ -166,6 +236,7 @@ end
     return val
 end
 
+# Method for ν′ = ∞: only K1 + K2 remain.
 @inline function (γ :: NL_Channel{Q})(
     Ω  :: MatsubaraFrequency,
     ν  :: MatsubaraFrequency,
@@ -201,6 +272,7 @@ end
     return val
 end
 
+# Method for ν = ν′ = ∞: only K1 remains.
 @inline function (γ :: NL_Channel{Q})(
     Ω  :: MatsubaraFrequency,
     ν  :: InfiniteMatsubaraFrequency,
@@ -225,8 +297,20 @@ end
     return val
 end
 
+# -----------------------------------------------------------------------------
+# Local objects called with momenta
+# -----------------------------------------------------------------------------
 
-# Evaluation of local vertices with auxiliary momentum arguments
+"""
+    (γ::Union{Channel, RefVertex, Vertex})(Ω, ν, νp, P, k, kp, args...; kwargs...) -> value
+    (γ::Union{Channel, RefVertex, Vertex})(Ω, ν, νp, P, args...; kwargs...) -> value
+
+Evaluate a local (momentum-independent) channel or vertex with momentum
+arguments, which are ignored. This lets the local DMFT vertex serve as the
+reference vertex f of a lattice calculation, and lets lattice code treat local
+and lattice objects the same way. Remaining arguments (channel, spin) and
+keywords are passed on.
+"""
 @inline function (γ :: Union{Channel{Q}, RefVertex{Q}, Vertex{Q}})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -242,6 +326,7 @@ end
     return γ(Ω, ν, νp, args...; kwargs...)
 end
 
+# Method with the bosonic momentum only, see the docstring above.
 @inline function (γ :: Union{Channel{Q}, RefVertex{Q}, Vertex{Q}})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -255,9 +340,17 @@ end
     return γ(Ω, ν, νp, args...; kwargs...)
 end
 
+# -----------------------------------------------------------------------------
+# From cumulative to separate classes
+# -----------------------------------------------------------------------------
 
-# reducer
-# Subtract the lower-order asymptotic vertices from the higher-order ones
+"""
+    reduce!(γ::NL_Channel) -> nothing
+
+Turn cumulative classes into separate ones, for every bosonic momentum: subtract
+K1 from K2, then K1 + K2 + K̄2 from K3 (see `reduce!` for the local `Channel`).
+Used by the tests.
+"""
 function reduce!(
     γ :: NL_Channel,
     ) :: Nothing
@@ -265,6 +358,7 @@ function reduce!(
     for iP in eachindex(get_P_mesh(γ))
         P = value(get_P_mesh(γ)[iP])
 
+        # K2(Ω, ν, P) -= K1(Ω, P)
         for iΩ in eachindex(meshes(γ.K2, Val(1)))
             Ω = value(meshes(γ.K2, Val(1))[iΩ])
             K1val = γ.K1[Ω, P]
@@ -275,6 +369,7 @@ function reduce!(
             end
         end
 
+        # K3(Ω, ν, ν′, P) -= K1(Ω, P) + K2(Ω, ν, P) + K̄2(Ω, ν′, P)
         for iΩ in eachindex(meshes(γ.K3, Val(1)))
             Ω = value(meshes(γ.K3, Val(1))[iΩ])
             K1val = γ.K1[Ω, P]
