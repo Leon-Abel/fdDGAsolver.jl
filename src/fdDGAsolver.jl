@@ -1,4 +1,26 @@
+# =============================================================================
+# The fdDGAsolver module: dependencies, source files, precompilation, exports.
+#
+# The files are included in dependency order: basic types and the vertex
+# containers first, then the local (impurity) solver, then the lattice solvers
+# NL, NL2, NL3 and the tools built on top of them. The physics, the notation
+# and a map of all files are in docs/physics_and_notation.md.
+# =============================================================================
+
 __precompile__(true)
+"""
+    fdDGAsolver
+
+Solver for the parquet equations with the finite-difference (fd) parquet method
+of Lihm, Kiese, Lee, Kugler, *The finite-difference parquet method*
+(arXiv:2505.20116). It computes the two-particle vertex and the self-energy of
+the Anderson impurity model (local solver) and of the Hubbard model on the
+square lattice (solvers NL, NL2, NL3). It works either in the parquet
+approximation (bare reference vertex) or in fd parquet DΓA, with the DMFT
+impurity as reference.
+
+The physics and the notation are explained in `docs/physics_and_notation.md`.
+"""
 module fdDGAsolver
 
     using PrecompileTools
@@ -18,6 +40,9 @@ module fdDGAsolver
         using LinearMaps
     end
 
+    # -------------------------------------------------------------------------
+    # Basic types, conventions, symmetries and the vertex containers
+    # -------------------------------------------------------------------------
     include("types.jl")
     include("convention.jl")
     include("symmetries.jl")
@@ -25,9 +50,16 @@ module fdDGAsolver
     include("refvertex.jl")
     include("vertex.jl")
 
+    # -------------------------------------------------------------------------
+    # Bare propagators of the two models
+    # -------------------------------------------------------------------------
     include("models/siam.jl")
     include("models/hubbard.jl")
 
+    # -------------------------------------------------------------------------
+    # Local (impurity) solver: solver type, bubbles, Dyson and Schwinger-Dyson
+    # equations, Bethe-Salpeter equations, iteration; reading DMFT input
+    # -------------------------------------------------------------------------
     include("ParquetSolver.jl")
     include("bubble.jl")
     include("dyson.jl")
@@ -38,6 +70,10 @@ module fdDGAsolver
     include("solve.jl")
     include("utility/load_triqs.jl")
 
+    # -------------------------------------------------------------------------
+    # Lattice solvers NL (s-wave approximation) and NL2 (K2 keeps the fermionic
+    # momentum): types and solver structs first
+    # -------------------------------------------------------------------------
     include("nonlocal/swave.jl")
     include("nonlocal/symmetries.jl")
     include("nonlocal/channel.jl")
@@ -50,6 +86,8 @@ module fdDGAsolver
     include("nonlocal_2/vertex.jl")
     include("nonlocal_2/ParquetSolver.jl")
 
+    # SDE, BSE kernels and K3 caches of NL and NL2; they come after both solver
+    # types are defined
     include("nonlocal/SDE.jl")
     include("nonlocal/BSE.jl")
     include("nonlocal/build_K3_cache.jl")
@@ -59,6 +97,10 @@ module fdDGAsolver
     include("nonlocal_2/SDE.jl")
     include("nonlocal_2/build_K3_cache.jl")
 
+    # -------------------------------------------------------------------------
+    # Shared tools: symmetry-group helper, momentum views, the preconditioned
+    # (mfRG) iteration, the multiboson-exchange (MBE) vertex
+    # -------------------------------------------------------------------------
     include("zero_out.jl")
 
     include("fixed_momentum_view.jl")
@@ -67,6 +109,9 @@ module fdDGAsolver
 
     include("boson_exchange.jl")
 
+    # -------------------------------------------------------------------------
+    # Lattice solver NL3 (full momentum dependence of K2 and K3)
+    # -------------------------------------------------------------------------
     include("nonlocal_3/symmetries.jl")
     include("nonlocal_3/channel.jl")
     include("nonlocal_3/vertex.jl")
@@ -74,10 +119,19 @@ module fdDGAsolver
     include("nonlocal_3/build_K3_cache.jl")
     include("nonlocal_3/BSE_K3.jl")
 
+    # -------------------------------------------------------------------------
+    # Utilities: flow of the bare propagator, interpolation between solver sizes
+    # -------------------------------------------------------------------------
     include("flow.jl")
     include("interpolate.jl")
 
 
+    # -------------------------------------------------------------------------
+    # Precompilation workload
+    # -------------------------------------------------------------------------
+    # Small calculations run once while the package is precompiled, so that
+    # later sessions start fast. With the bare reference vertex (g = 0, f = U)
+    # the :fdPA strategy reduces to the plain parquet approximation.
     @compile_workload begin
         MPI.Init()
 
@@ -97,6 +151,7 @@ module fdDGAsolver
         mK_G = BrillouinZoneMesh(BrillouinZone(2, k1, k2))
         mK_Γ = BrillouinZoneMesh(BrillouinZone(2, k1, k2))
 
+        # parquet approximation: Anderson impurity, Hubbard NL and NL2
         S = parquet_solver_siam_parquet_approximation(nG, nK1, nK2, nK3; e = 0., T, U, Δ = 3., D = 10., mode = :hybrid)
         init_sym_grp!(S)
         solve!(S; strategy = :fdPA, maxiter = 1, verbose = false)
@@ -113,9 +168,10 @@ module fdDGAsolver
         unflatten!(S, flatten(S))
 
         # ----------------------------------------------------------------------------
-        # Parquet DΓA
+        # Parquet DΓA with the DMFT reference at the "Wu point" (Lihm 2025,
+        # Figs. 3-5: U = 5.6, T = 0.2, t′ = -0.3, about 4% hole doping)
 
-        # System parameters
+        # System parameters (μ includes the Hartree shift -U/2)
         T = 0.2
         U = 5.6
         μ = 2.1800201007694464 - U/2
@@ -140,7 +196,8 @@ module fdDGAsolver
         mG = MatsubaraMesh(T, nG, Fermion)
         Gbare = hubbard_bare_Green(mG, mK_G; μ, t1, t2)
 
-        # Set reference Green function and self-energy
+        # Reference Green function and self-energy: the local DMFT values,
+        # copied to every momentum
         G0 = copy(Gbare)
         Σ0 = copy(Gbare)
         set!(G0, 0)
@@ -152,15 +209,18 @@ module fdDGAsolver
         occ_target = data_triqs.occ
         hubbard_params = (; t1, t2)
 
+        # reference vertex f: the local DMFT vertex, wrapped as a lattice vertex
         F0 = NL2_Vertex(data_triqs.Γ, T, nK1, nK2, nK3, mK_Γ)
         S = NL2_ParquetSolver(nK1, nK2, nK3, mK_Γ, copy(Gbare), copy(G0), copy(Σ0), F0; mode = :hybrid)
         init_sym_grp!(S)
         solve_using_mfRG!(S; maxiter = 1, occ_target, hubbard_params, tol = 1e3, verbose=false);
 
+        # Σ_corr = σ - SDE[f](g), used by the legacy driver solve_using_mfRG_v2!
         Σ_corr = copy(S.Σ0)
         mult_add!(Σ_corr, SDE!(copy(Σ_corr), S.G0, S.Π0pp, S.Π0ph, S.L0pp, S.L0ph, S.F0, S.SGΣ, S.SG0pp2, S.SG0ph2; S.mode, include_U² = true, include_Hartree = true), -1)
         solve_using_mfRG_v2!(S; maxiter = 1, occ_target, hubbard_params, tol = 1e3, verbose=false, Σ_corr);
 
+        # the same with the multiboson-exchange (MBE) form of the vertex
         F0 = NL2_MBEVertex(asymptotic_to_mbe(data_triqs.Γ), T, nK1, nK2, nK3, mK_Γ)
         S = NL2_ParquetSolver(nK1, nK2, nK3, mK_Γ, copy(Gbare), copy(G0), copy(Σ0), F0, NL2_MBEVertex)
         # Trigger compilation. Without this NL2_MBEVertex evaluation with two kSW in
@@ -177,6 +237,9 @@ module fdDGAsolver
         res = solve_using_mfRG_without_mixing!(S; strategy = :fdPA_new, update_Σ = true, occ_target, hubbard_params, maxiter=1);
     end
 
+    # -------------------------------------------------------------------------
+    # Exported names
+    # -------------------------------------------------------------------------
     export
         pCh, tCh, aCh,
         pSp, xSp, dSp,
