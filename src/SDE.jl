@@ -93,7 +93,7 @@ Solver method: overwrites `S.Σ`.
 
 Array method: adds `SDE[F](G)` to `Σ` (stored as iΣ). The vertex is nested, so
 it walks down `F → F.F0 → F.F0.F0 → …` and adds the channel terms of every level
-(see `SDE_compute!`). The Σ_U² and Hartree terms belong to the vertex as a
+(see `SDE_compute!`). The `Σ_U²` and Hartree terms belong to the vertex as a
 whole and are added only once, at the top level.
 """
 function SDE!(S :: AbstractSolver; strategy = :scPA, include_U² = true, include_Hartree = true, subtract_asymptotic = false)
@@ -191,7 +191,7 @@ This is the mirrored form of `[Φ_p Π_p U](q, k)` in Lihm 2025, Eq. (S36c). In
 the p channel the vertex's internal leg sits at Ω - ν̃ (Eq. (S15)). Closing the
 kernel with `G(Ω - ν)` gives the p-channel part of Σ (see `SDE_compute!`).
 
-- For a `Vertex`, Φ_p is the vertex's own p channel. Its `F0` and the other
+- For a `Vertex`, `Φ_p` is the vertex's own p channel. Its `F0` and the other
   channels are left out; they are handled at their own level of the chain.
 - For a `RefVertex`, which has no channels, its whole non-bare part
   `F_ref - U` is used.
@@ -378,7 +378,7 @@ written into `Σ` (stored as iΣ):
    channel part is zero.
 3. For a `RefVertex` the same vertex was used in all three channel forms, so
    the result is divided by 3.
-4. Optionally add the second-order term Σ_U² (Eq. (S46)) and the Hartree term
+4. Optionally add the second-order term `Σ_U²` (Eq. (S46)) and the Hartree term
    `U (n - 1/2)`.
 
 `SGΣ`, `SGpp2`, `SGph2` are the symmetry groups of Σ and of the two kernels.
@@ -585,7 +585,7 @@ outer leg at infinity (Eqs. (S23a-b), mirrored; compare Eq. (S57)). This gives
     iΣ(ν) = 1/β ∑_ν̃ iG(ν̃) [ K1_p(ν + ν̃) + K2_p(ν + ν̃, ν) ]   (+ Hartree)
 
 It reads K1 and K2 of the vertex's own p channel directly, so for an fd vertex
-only the difference Φ̃_p is used.
+only the difference `Φ̃_p` is used.
 Only called from commented-out code in [`SDE!`](@ref).
 """
 function SDE_using_K12!(
