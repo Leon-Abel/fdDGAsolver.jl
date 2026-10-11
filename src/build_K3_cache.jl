@@ -1,37 +1,44 @@
-# build_K3_cache.jl
+# =============================================================================
+# Precomputed vertex slices ("caches") for the K3 Bethe-Salpeter equation
+# (local solver).
 #
-# Precompute the vertex components that are used repeatedly in the BSE for the K3 vertex.
+# Every term of the K3 BSE (BSEa/BSEa_K3.jl; Lihm 2025, Eq. (S29d), mirrored)
+# has the form
 #
-# Φ_r(ω, ν, ν') = K_1r(Ω) + K_2r(Ω, ν) + K_2r(Ω, ν') + K_3r(Ω, ν, ν')
-#               = I_r * Π_r * F
-# 
-# // I_r = F_0 + (I_r - F_0), F = F_012r + (F - F_012r), F_012r = F_0 + K_1r + K_2r //
+#   C(Ω, ν, ν′) = 1/β ∑_ν̃ A(Ω, ν, ν̃) Π(Ω, ν̃) B(Ω, ν̃, ν′).
 #
-#               = F_0 * Π_r(Ω, ω) * F_012r(Ω, ω) 
-#               + (I_r - F_0)(Ω, ν, ω) * Π_r(Ω, ω) * F_012r(Ω,ω)
-#               + F_0 * Π_r(Ω, ω) * (I_r - F_0)(Ω, ω, ν') 
-#               + (I_r - F_0)(Ω, ν, ω) * Π_r(Ω, ω) * (I_r - F_0)(Ω, ω, ν')
+# A does not depend on ν′ and B not on ν. So both are evaluated once per sweep
+# and stored, instead of being recomputed inside the loops over ν and ν′.
+# Evaluating a full vertex is expensive (it sums F0 and three channels at
+# converted frequencies), so this saves most of the work.
 #
-# The K3 channel BSE has the form ``C(Ω, ν, ν') = A(Ω, ν, ω) * Π(Ω, ω) * B(Ω, ω, ν')``.
-# Since the vertex `A(Ω, ν, ω)` does not depend on `ν'`, it can be computed outside the
-# loop over `ν'`. The same applies to the vertex `B(Ω, ω, ν')`.
-# Here, we compute all the necessary vertices that appear in the BSE for the K3 vertex.
-# In the code, we denote the inner, integrated frequency variable with `ω` and the
-# outer frequency variable with `ν` and `νp`.
+# Only the parts that decay at large frequency are stored: from each vertex
+# its limit for the outer frequency → ∞ is subtracted. That limit contains K1
+# and K2 only, which are handled by the K1 and K2 BSEs (Eqs. (S29a-c)).
 #
-# The `ω` component of the precomputed vertex should be computed on the frequency mesh of
-# the bubble, which is coarser than that of the K3 vertex.
+# Caches (all on the K3 box; ν̃ = internal frequency, called ω in the code):
+#   B-type, indexed (Ω, ν̃, ν′):
+#     cache_F0r = f - f_012           reference vertex minus its ν′ → ∞ limit
+#     cache_Γpx = Ĩ_p                 crossed spin component (for Eq. (S9a))
+#   A-type, indexed (Ω, ν, ν̃):
+#     cache_Γr  = Ĩ_r                 sum of the other two fd channels
+#     cache_Fr  = F - F_01̄2           target vertex minus its ν → ∞ limit
+# For the p channel f is stored in the crossed spin component; for the t
+# channel all caches hold the density combination dSp = 2·pSp + xSp, with
+# xSp_t = -pSp_a by crossing symmetry (types.jl).
 #
-# We store only the decaying contributions of the vertices, i.e., we subtract the asymptotic
-# contributions, as they are accounted for in the BSE for the K1 and K2 vertices.
-# Concretely, for a vertex V(Ω, ν, ω) we cache V(Ω, ν, ω) - V(Ω, ν, ω→∞), where the
-# ω→∞ limit retains only the K1 and K2 contributions (which are ν-independent or
-# ω-independent in that limit).
-#
-# There are multiple types of vertices to precompute.
-# - `cache_F0*`: Full vertex of the reference system (`S.F0`)
-# - `cache_Γ*` : Irreducible finite-difference vertex (`S.F` with `F0=false`, `γ*=false`)
-# - `cache_F*` : Full vertex of the target system (`S.F`)
+# Because the caches live on the K3 box, the ν̃ sum of the K3 BSE is cut at the
+# K3 box (while the bubble mesh is larger).
+# =============================================================================
+
+"""
+    build_K3_cache!(S::ParquetSolver) -> nothing
+
+Fill the K3 caches of the solver from the current target vertex `S.F` and
+the reference vertex `S.F0` (see the file header for what each cache holds).
+Called at the start of every sweep, before the K3 BSEs. Work is split over
+threads and MPI ranks; `mpi_allreduce!` collects the parts.
+"""
 function build_K3_cache!(
     S :: ParquetSolver{Q}
     ) where {Q}
@@ -48,13 +55,13 @@ function build_K3_cache!(
     set!(S.cache_Fa,  0)
     set!(S.cache_Ft,  0)
 
-    # PART 1: Caches indexed as (Ω, ω, νp).
-    # These are the vertices B(Ω, ω, νp) multiplied by bubbles from the right (by ω) that appear in the
-    # K3 BSE kernel C(Ω, ν, νp) = A(Ω, ν, ω) * Π(Ω, ω) * B(Ω, ω, νp).
-    # Since they depend on νp but NOT on ν, they can be precomputed independently of the ν loop.
+    # PART 1: caches indexed as (Ω, ν̃, ν′).
+    # These are the vertices B(Ω, ν̃, ν′) that stand to the right of the bubble
+    # in C(Ω, ν, ν′) = A(Ω, ν, ν̃) Π(Ω, ν̃) B(Ω, ν̃, ν′). They depend on ν′ but not
+    # on ν.
 
-    # Γpx: p-channel irreducible vertex of the TARGET system in the *crossed*
-    # spin component (xSp). 
+    # Γpx: Ĩ_p of the target in the crossed spin component (xSp), for the
+    # p-channel BSE in the form of Lihm 2025, Eq. (S9a).
     Threads.@threads for i in mpi_split(1 : length(S.cache_Γpx.data))
         Ω, ω, νp = value.(MatsubaraFunctions.to_meshes(S.cache_Γpx, i))
 
@@ -74,18 +81,19 @@ function build_K3_cache!(
     mpi_allreduce!(S.cache_F0t)
 
 
-    # Vertices multiplied by bubbles from the right (by ω)
+    # PART 2: caches indexed as (Ω, ν, ν̃).
+    # These are the vertices A(Ω, ν, ν̃) that stand to the left of the bubble.
 
     Threads.@threads for i in mpi_split(1 : length(S.cache_Γpp.data))
         Ω, ν, ω = value.(MatsubaraFunctions.to_meshes(S.cache_Γpp, i))
 
-        # r-irreducible vertex in each channel r = p, a, t
+        # Ĩ_r in each channel r = p, a, t: no reference part, no own channel
         S.cache_Γpp[i] = S.F(Ω, ν, ω, pCh, pSp; F0=false, γp=false)
         S.cache_Γa[i]  = S.F(Ω, ν, ω, aCh, pSp; F0=false, γa=false)
         S.cache_Γt[i]  = S.F(Ω, ν, ω, tCh, pSp; F0=false, γt=false)
 
-        # Total vertex in each channel. We compute the reducible part and add the
-        # irreducible part computed above
+        # F - F_01̄2 in each channel. Only F0 and the channel's own Φ̃_r survive
+        # ν → ∞, so take (F0 + Φ̃_r)(ν) - (F0 + Φ̃_r)(∞) and add Ĩ_r from above.
         S.cache_Fp[i]  = ( S.F(Ω,    ν, ω, pCh, pSp; γa=false, γt=false)
                          - S.F(Ω, νInf, ω, pCh, pSp; γa=false, γt=false)
                          + S.cache_Γpp[i] )
