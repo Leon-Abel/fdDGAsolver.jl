@@ -1,19 +1,36 @@
+# =============================================================================
+# Bare propagator of the single-impurity Anderson model (SIAM, also called
+# AIM).
+#
+# One interacting impurity level coupled to a non-interacting bath (Lihm 2025,
+# Eq. (6)). Integrating out the bath gives the bare impurity propagator
+#
+#   G₀(iν) = 1 / (iν - e - Δ(iν)),
+#
+# where the hybridization function Δ(iν) carries the effect of the bath. The
+# interaction U enters only later, through the vertex.
+#
+# As everywhere in the code, the propagator is stored multiplied by i (see
+# dyson.jl), and e is measured from half filling, so e = 0 is the
+# particle-hole symmetric point.
+# =============================================================================
+
 """
-    siam_bare_Green(mesh, ::Type{Q}; Δ, e, D)
+    siam_bare_Green(mesh, Q = ComplexF64; Δ, e, D) -> MeshFunction
 
-Compute the bare (non-interacting) Green function G₀(iν) of the
-**Single Impurity Anderson Model** (SIAM).
+Bare impurity propagator of the Anderson model on the fermionic Matsubara
+`mesh`, stored as `iG₀(iν)` with `G₀(iν)⁻¹ = iν - e - Δ(iν)`.
 
-The bare Green function G₀(iν) is defined by integrating out the bath degrees
-of freedom exactly (no interaction U), yielding the impurity Dyson equation:
+- `Δ`: hybridization strength Γ = π ρ(0) |V|², the width the bath gives the
+  impurity level. It sets the scale of Δ(iν).
+- `e`: impurity level, measured from half filling (it includes the Hartree
+  shift of the self-energy), so `e = 0` is particle-hole symmetric.
+- `D`: half bandwidth of the box-shaped bath density of states. `D = Inf` is
+  the wide-band limit.
 
-    G₀(iν)⁻¹ = iν - e - Δ(iν)
- 
-- `Δ` : Hybridization strength Γ = π·ρ(0)·|V|² (a real scalar), which sets the
-        magnitude of the frequency-dependent hybridization function Δ(iν).
-- `e` : Impurity on-site energy plus Hartree contribution of the self-energy, therefore 
-        `e = 0` corresponds to particle-hole symmetry (half-filling)
-- `D` : Half bandwidth. Use `D = Inf` for the wide-band limit; `D < Inf` for a finite box-shaped bath.
+For a box bath, `Δ(iν) = -i (2Δ/π) arctan(D/ν)`; in the wide-band limit this
+becomes `-iΔ sgn(ν)`. Lihm 2025 uses U = 5.75, V = 2 and D = 10 for the AIM
+(text below Eq. (6)), i.e. `Δ = π V² / (2D) ≈ 0.63`.
 """
 function siam_bare_Green(
     mesh :: FMesh,
@@ -25,15 +42,15 @@ function siam_bare_Green(
     G0 = MeshFunction(mesh; data_t = Q)
 
     # We store im·G₀.
-    # For every fermionic Matsubara frequency iν_n = 2π(n + 1/2) * T we evaluate
+    # For every fermionic Matsubara frequency iν_n = iπT(2n + 1) we evaluate
     # the non-interacting impurity Green function with the chosen bath model.
     for ν in mesh
-        # extract the real frequency value iν_n = 2π(n + 1/2) * T as a Float.
+        # the real number ν_n = πT(2n + 1)
         ν_value = plain_value(ν)
 
         # In the wide-band limit (D → ∞) the hybridization function becomes purely imaginary and
         # frequency-independent: Δ(iν) = -iΔ · sgn(ν)   →   iG₀(iν) = 1 / (ν + ie + Δ · sgn(ν))
-        # Δ ==Γ (spectral hybridization function)
+        # (here Δ is the hybridization strength Γ)
         if D == Inf
             G0[ν] = 1 / (ν_value + im * e + Δ * sign(ν_value))
 
