@@ -151,11 +151,11 @@ struct dSp <: SpinTag end
 # -----------------------------------------------------------------------------
 
 """
-Fermionic Matsubara frequency mesh, with frequencies iν_n = iπ(2n+1)/β.
+Fermionic Matsubara frequency mesh, with frequencies `iν_n` = iπ(2n+1)/β.
 """
 const FMesh = Mesh{MeshPoint{MatsubaraFrequency{Fermion}}, MatsubaraDomain}
 """
-Bosonic Matsubara frequency mesh, with frequencies iΩ_n = i2πn/β.
+Bosonic Matsubara frequency mesh, with frequencies `iΩ_n` = i2πn/β.
 """
 const BMesh = Mesh{MeshPoint{MatsubaraFrequency{Boson}}, MatsubaraDomain}
 """
