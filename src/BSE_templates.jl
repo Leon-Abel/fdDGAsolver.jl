@@ -30,7 +30,8 @@
 Frequency at which the vertex on the right of the bubble is evaluated, for the
 internal (summed) frequency `ω`. In the p channel it is `Ω - ω`: the code uses
 the p-channel BSE in the form of Lihm 2025, Eq. (S15), whose right vertex sits
-at `Ω - ν̃`. In the a and t channels it is `ω` itself.
+at `Ω - ν̃`. In the a and t channels it is `ω` itself. The NL2 and NL3 kernels
+apply it to momenta in the same way: `_crossing(P, k̃, pCh) = P - k̃`.
 
 (`boson_exchange.jl` defines an unrelated `_crossing` that maps the classes
 K2 ↔ K̄2.)
