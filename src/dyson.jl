@@ -1,34 +1,37 @@
-# dyson.jl
+# =============================================================================
+# Dyson equation, occupation, and the chemical potential for a given density.
 #
-# Implements the Dyson equation for the single-particle Green's function, 
-# along with utilities for computing the electron occupation
-# and the chemical potential.
+# The Dyson equation G = (G₀⁻¹ - Σ)⁻¹ gives the full propagator from the bare
+# one and the self-energy. The occupation per spin follows from G, and for the
+# Hubbard model μ can be tuned so that it matches a target density (used to
+# keep the density at its DMFT value, Lihm 2025, text below Eq. (7)).
 #
-# IMPORTANT SIGN/PHASE CONVENTION: 
-# Throughout this codebase, all Green's functions and self-energies are stored 
-# multiplied by the imaginary unit `im`, i.e. the arrays contain (im * G) and (im * Σ)
-# rather than G and Σ themselves. This transforms the Dyson equation as follows:
-# Writing G̃ = im*G, Σ̃ = im*Σ, G̃₀ = im*G₀:
-#   G(iν) = [G₀⁻¹(iν) - Σ(iν)]⁻¹
-#   => im * G = [1/(im*G₀) - (-1)*(im*Σ)]⁻¹  -- note the sign flip: -Σ becomes +Σ̃
-#   => G̃ = [G̃₀⁻¹ + Σ̃]⁻¹
+# Sign and phase convention, used in the whole code: Green functions and
+# self-energies are stored multiplied by the imaginary unit, i.e. the arrays
+# hold iG and iΣ instead of G and Σ. At half filling these are real. With
+# G̃ = iG, Σ̃ = iΣ, G̃₀ = iG₀ the Dyson equation becomes
+#
+#   G = (G₀⁻¹ - Σ)⁻¹   =>   G̃ = (G̃₀⁻¹ + Σ̃)⁻¹
+#
+# i.e. the minus sign in front of Σ turns into a plus sign. A consequence is
+# that the stored bubbles (iG)(iG) = -GG carry an extra minus sign
+# (bubble.jl).
+# =============================================================================
 
 """
     Dyson!(S::AbstractSolver)
- 
-Wrapper that applies the Dyson equation in-place using the fields of a solver object `S`. 
-Delegates to the appropriate `Dyson!(G, Σ, Gbare)` method depending on the type of `S.G`.
+    Dyson!(G, Σ, Gbare) -> nothing
+
+Dyson equation, in place: overwrite `G` with `(Gbare⁻¹ - Σ)⁻¹`, written for the
+stored iG, iΣ as `iG = ((iGbare)⁻¹ + iΣ)⁻¹`. Works for local (`G(ν)`) and lattice
+(`G(ν, k)`) propagators. The solver method updates the target propagator
+`S.G` from `S.Σ` and `S.Gbare`.
 """
 function Dyson!(S::AbstractSolver)
     Dyson!(S.G, S.Σ, S.Gbare)
 end
 
-"""
-    Dyson!(G::MF_G, Σ::MF_G, Gbare::MF_G,)::Nothing 
-    
-Applies the Dyson equation in-place for a **local** (momentum-independent) Green's function
-defined on a fermionic Matsubara frequency mesh.
-"""
+# Dyson! for a local propagator G(ν), see the docstring above.
 function Dyson!(
     G     :: MF_G,
     Σ     :: MF_G,
@@ -43,12 +46,7 @@ function Dyson!(
     return nothing
 end
 
-"""
-    Dyson!(G::NL_MF_G, Σ::NL_MF_G, Gbare::NL_MF_G,)::Nothing
- 
-Applies the Dyson equation in-place for a **nonlocal** (momentum-resolved) Green's function
-defined on a fermionic Matsubara frequency mesh and a Brillouin-zone k-mesh.
-"""
+# Dyson! for a lattice propagator G(ν, k), see the docstring above.
 function Dyson!(
     G     :: NL_MF_G,
     Σ     :: NL_MF_G,
@@ -64,43 +62,41 @@ function Dyson!(
 end
 
 """
-    compute_occupation(G::MF_G)::Float64
- 
-Computes the single-spin electron occupation ⟨n⟩ from the **local**
-Matsubara Green's function.
+    compute_occupation(G) -> n
+
+Occupation per spin, `n = ⟨n_σ⟩`, from the propagator: the local `G(ν)`, or the
+lattice `G(ν, k)` averaged over the Brillouin zone.
+
+`n = T ∑_ν G(iν) e^{iν0⁺}`. The 1/(iν) tail of G gives the 1/2; the rest is
+`T ∑_ν Re G(iν)`, which converges on a finite frequency mesh. Since iG is stored,
+`Re G = Im(iG)`.
 """
 function compute_occupation(
     G :: MF_G
     ) :: Float64
-    # ⟨n⟩ = T Σ_ν G(iν) e^{-iν0⁺} (from inverse fourier transform)
+    # ⟨n⟩ = G(τ = 0⁻) = T ∑_ν G(iν) e^{iν0⁺} (from the inverse Fourier transform)
     # the ½ offset comes from the asymptotic tail G(iν) ~ 1/(iν) for large ν;
-    # summing the full Green's function over a finite Matsubara grid gives a converged result 
+    # summing the full Green's function over a finite Matsubara grid gives a converged result
     # only after adding this analytic contribution from the high-frequency tail.
     return 0.5 + imag(sum(G.data)) * temperature(meshes(G, Val(1)))
 end
 
-"""
-    compute_occupation(G::NL_MF_G)
- 
-Computes the single-spin electron occupation ⟨n⟩ for the **nonlocal** (lattice) Green's
-function by averaging over the Brillouin zone.
-"""
+# compute_occupation for a lattice propagator, see the docstring above.
 function compute_occupation(G :: NL_MF_G)
-    #⟨n⟩ = (1/N_k) Σ_k [ ½ + T Σ_ν (im * G(iν, k)) ]
-    #   = ½ + T/N_k · Im[ Σ_{ν,k} (im * G(iν, k)) ]
+    #⟨n⟩ = (1/N_k) ∑_k [ ½ + T ∑_ν (im * G(iν, k)) ]
+    #   = ½ + T/N_k · Im[ ∑_{ν,k} (im * G(iν, k)) ]
     return 0.5 + imag(sum(G.data)) * temperature(meshes(G, Val(1))) / length(meshes(G, Val(2)))
 end
 
 """
-    compute_hubbard_chemical_potential(occ_target, Σ, hubbard_params)
- 
-Finds the chemical potential μ for the Hubbard model such that the electron occupation
-matches a target value `occ_target` (per spin), given a fixed self-energy `Σ`.
- 
-This is a root-finding problem: 
-    f(μ) = ⟨n⟩(μ) - occ_target = 0
-where ⟨n⟩(μ) is obtained by constructing the bare Green's function G₀(iν, k; μ),
-solving the Dyson equation for G(iν, k), and computing the occupation.
+    compute_hubbard_chemical_potential(occ_target, Σ, hubbard_params) -> μ
+
+Chemical potential μ of the Hubbard model for which the occupation per spin
+equals `occ_target`, at fixed self-energy `Σ`. For a trial μ it builds the bare
+propagator ([`hubbard_bare_Green`](@ref) with `hubbard_params`, e.g.
+`(; t1, t2)`), solves the Dyson equation and computes the occupation. A
+bracketing root finder then solves `n(μ) = occ_target`. The returned μ uses the
+code's convention, without the Hartree U/2 (models/hubbard.jl).
 """
 function compute_hubbard_chemical_potential(occ_target, Σ, hubbard_params)
     # temporary Green's function with the same mesh structure as Σ
@@ -113,9 +109,9 @@ function compute_hubbard_chemical_potential(occ_target, Σ, hubbard_params)
         compute_occupation(G_tmp)
     end
 
-    # Use a bracketed scalar root-finder to solve occupation(μ) = occ_target
-    # the search-interval [-4|t₁|, +4|t₁|] contains the full non-interacting bandwidth 
-    # W = 8|t₁| of the 2D square lattice (nearest-neighbor only).
+    # Use a bracketed scalar root-finder to solve occupation(μ) = occ_target.
+    # The search interval [-4|t₁|, +4|t₁|] covers the bandwidth W = 8|t₁| of
+    # the nearest-neighbor square lattice.
     μ = find_zero(μ -> occupation(μ) - occ_target, (-4 * abs(hubbard_params.t1), 4 * abs(hubbard_params.t1)))
 
     return μ
