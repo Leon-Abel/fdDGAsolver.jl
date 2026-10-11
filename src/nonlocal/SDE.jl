@@ -1,5 +1,50 @@
-# Implementations for NL_ParquetSolver (nonlocal vertex with bosonic momentum dependence)
+# =============================================================================
+# Schwinger-Dyson equation (SDE) for the s-wave lattice solver NL.
+#
+# The physics is that of the local SDE (SDE.jl; Lihm 2025, Eqs. (S34)-(S38)),
+# now with momenta (Eq. (S36)):
+#
+#   Σ(ν, k) = 1/β 1/N_q ∑_{Ω,q} [ G(Ω - ν, q - k) Lpp(Ω, ν; q)
+#                               + G(Ω + ν, q + k) Lph(Ω, ν; q) ]
+#             + Σ_U² + Σ_H
+#
+# with the kernels of one vertex level F (s-wave, so they keep only the bosonic
+# momentum q):
+#
+#   Lpp(Ω, ν; q) = U · 1/β ∑_ν̃ Π_p(Ω, ν̃; q) Φ_p(Ω, Ω - ν̃, ν; q)
+#   Lph(Ω, ν; q) = U · 1/β ∑_ν̃ Π_a(Ω, ν̃; q) [Φ_a + Φ_t](Ω, ν, ν̃; q)
+#
+# Π are the k-averaged bubbles of NL (nonlocal/bubble.jl). The sum over q is a
+# convolution in momentum, so it is done in real space with FFTs. As in the
+# local code, SDE! (SDE.jl) applies this to every level of the nested vertex
+# F → F.F0 → …, and adds Σ_U² and the Hartree term once.
+#
+# The kernels use only the level's own channels (`F.γp`, `F.γt`, `F.γa`), so
+# each reducible vertex is counted exactly once (compare open question (a) in
+# docs/physics_and_notation.md for NL2).
+#
+# Symbols as in SDE.jl: Φ_r reducible vertex of channel r (fields `γa`, `γp`,
+# `γt`), Σ_H = U(n - 1/2) Hartree term, Σ_U² second-order term (Eq. (S46)).
+# Paper ↔ code: q ↔ P; ν̃ (summed) ↔ ω; G and Σ stored as iG and iΣ.
+# =============================================================================
 
+# -----------------------------------------------------------------------------
+# Channel kernels L
+# -----------------------------------------------------------------------------
+
+"""
+    SDE_channel_L_pp!(Lpp, Πpp, F::Union{Vertex, NL_Vertex}, SGpp2; mode, subtract_asymptotic = false) -> nothing
+
+Lattice (NL) version of the p-channel SDE kernel (see the local method in
+SDE.jl): `Lpp(Ω, ν; q) = U · 1/β ∑_ν̃ Π_p(Ω, ν̃; q) Φ_p(Ω, Ω - ν̃, ν; q)`, with `Φ_p`
+the vertex level's own p channel. `F` may be a local `Vertex` (e.g. the DMFT
+reference, which ignores q).
+
+`subtract_asymptotic = true` leaves out the part of `Φ_p` that does not depend on
+ν (its ν → ∞ limit). That part was meant to be computed separately as a
+GW-type self-energy, which is not done anywhere in the package. The option is
+not used.
+"""
 function SDE_channel_L_pp!(
     Lpp   :: NL_MF_K2{Q},
     Πpp   :: NL_MF_Π{Q},
@@ -10,7 +55,7 @@ function SDE_channel_L_pp!(
     subtract_asymptotic :: Bool = false,
     )     :: Nothing where {Q}
 
-    # model the diagram
+    # Lpp(Ω, ν; q) for one point: sum over the internal frequency ν̃ (called ω)
     @inline function diagram(wtpl)
 
         Ω, ν, P = wtpl
@@ -20,6 +65,7 @@ function SDE_channel_L_pp!(
         for i in eachindex(Πslice)
             ω = value(meshes(Πpp, Val(2))[i])
 
+            # U Π_p Φ_p(Ω, Ω - ν̃, ν; q), the level's own p channel only
             val += bare_vertex(F) * Πslice[i] * F.γp(Ω, Ω - ω, ν, P)
 
             if subtract_asymptotic
@@ -32,12 +78,20 @@ function SDE_channel_L_pp!(
         return temperature(F) * val
     end
 
-    # compute Lpp
+    # evaluate one point per symmetry class; the symmetry group fills in the rest
     SGpp2(Lpp, InitFunction{3, Q}(diagram); mode)
 
     return nothing
 end
 
+"""
+    SDE_channel_L_ph!(Lph, Πph, F::Union{Vertex, NL_Vertex}, SGph2; mode, subtract_asymptotic = false) -> nothing
+
+Lattice (NL) version of the particle-hole SDE kernel (see the local method in
+SDE.jl): `Lph(Ω, ν; q) = U · 1/β ∑_ν̃ Π_a(Ω, ν̃; q) [Φ_a + Φ_t](Ω, ν, ν̃; q)`, with
+the level's own a and t channels. `subtract_asymptotic` as in the p-channel
+kernel.
+"""
 function SDE_channel_L_ph!(
     Lph   :: NL_MF_K2{Q},
     Πph   :: NL_MF_Π{Q},
@@ -48,7 +102,7 @@ function SDE_channel_L_ph!(
     subtract_asymptotic :: Bool = false,
     )     :: Nothing where {Q}
 
-    # model the diagram
+    # Lph(Ω, ν; q) for one point: sum over the internal frequency ν̃ (called ω)
     @inline function diagram(wtpl)
 
         Ω, ν, P = wtpl
@@ -58,6 +112,7 @@ function SDE_channel_L_ph!(
         for i in eachindex(Πslice)
             ω = value(meshes(Πph, Val(2))[i])
 
+            # U Π_a [Φ_t + Φ_a](Ω, ν, ν̃; q), the level's own channels only
             val += bare_vertex(F) * Πslice[i] * (F.γt(Ω, ν, ω, P) + F.γa(Ω, ν, ω, P))
 
             if subtract_asymptotic
@@ -70,14 +125,15 @@ function SDE_channel_L_ph!(
         return temperature(F) * val
     end
 
-    # compute Lph
+    # evaluate one point per symmetry class; the symmetry group fills in the rest
     SGph2(Lph, InitFunction{3, Q}(diagram); mode)
 
     return nothing
 end
 
-# U * Π * (F - U) for F <: RefVertex
+# RefVertex methods: U Π (F_ref - U). A RefVertex has no momentum dependence.
 
+# RefVertex method of SDE_channel_L_pp! (NL), see SDE.jl.
 function SDE_channel_L_pp!(
     Lpp   :: NL_MF_K2{Q},
     Πpp   :: NL_MF_Π{Q},
@@ -88,7 +144,7 @@ function SDE_channel_L_pp!(
     subtract_asymptotic :: Bool = false,
     )     :: Nothing where {Q}
 
-    # model the diagram
+    # Lpp(Ω, ν; q) for one point: sum over the internal frequency ν̃ (called ω)
     @inline function diagram(wtpl)
 
         Ω, ν, P = wtpl
@@ -104,12 +160,13 @@ function SDE_channel_L_pp!(
         return temperature(F) * val
     end
 
-    # compute Lpp
+    # evaluate one point per symmetry class; the symmetry group fills in the rest
     SGpp2(Lpp, InitFunction{3, Q}(diagram); mode)
 
     return nothing
 end
 
+# RefVertex method of SDE_channel_L_ph! (NL), see SDE.jl.
 function SDE_channel_L_ph!(
     Lph   :: NL_MF_K2{Q},
     Πph   :: NL_MF_Π{Q},
@@ -120,7 +177,7 @@ function SDE_channel_L_ph!(
     subtract_asymptotic :: Bool = false,
     )     :: Nothing where {Q}
 
-    # model the diagram
+    # Lph(Ω, ν; q) for one point: sum over the internal frequency ν̃ (called ω)
     @inline function diagram(wtpl)
 
         Ω, ν, P = wtpl
@@ -136,13 +193,25 @@ function SDE_channel_L_ph!(
         return temperature(F) * val
     end
 
-    # compute Lph
+    # evaluate one point per symmetry class; the symmetry group fills in the rest
     SGph2(Lph, InitFunction{3, Q}(diagram); mode)
 
     return nothing
 end
 
+# -----------------------------------------------------------------------------
+# Self-energy of one vertex level
+# -----------------------------------------------------------------------------
 
+"""
+    SDE_compute!(Σ, G, Πpp, Πph, Lpp, Lph, F, SGΣ, SGpp2, SGph2; mode = :threads, use_real_space = true, include_U² = true, include_Hartree = true, subtract_asymptotic = false) -> Σ
+
+Lattice (NL) version of `SDE_compute!` (SDE.jl): the self-energy contribution
+of one vertex level `F`, written into `Σ` (stored as iΣ). It builds the kernels
+`Lpp`, `Lph`, closes them with one propagator (`SDE_compute_inner!`), divides a
+RefVertex contribution by 3 (its three channel forms are the same vertex), and
+optionally adds `Σ_U²` and the Hartree term `U (n - 1/2)`.
+"""
 function SDE_compute!(
     Σ     :: NL_MF_G{Q},
     G     :: NL_MF_G{Q},
@@ -161,7 +230,7 @@ function SDE_compute!(
     include_Hartree = true,
     subtract_asymptotic = false,
     )     :: NL_MF_G{Q} where {Q}
-    # γa, γp, γt contribution to the self-energy in the asymptotic decomposition
+    # contribution of this level's own channels Φ_a, Φ_p, Φ_t
 
     SDE_channel_L_pp!(Lpp, Πpp, F, SGpp2; mode, subtract_asymptotic)
     SDE_channel_L_ph!(Lph, Πph, F, SGph2; mode, subtract_asymptotic)
@@ -175,12 +244,14 @@ function SDE_compute!(
     end
 
     if include_U²
+        # second-order diagram SDE[U], Eq. (S46)
         Σ_U² = SDE_U2_using_G(Σ, G, SGΣ, bare_vertex(F); mode)
         # Σ_U² = SDE_U2_using_Π(Σ, G, Πpp, Πph, SGΣ, bare_vertex(F); mode)
         add!(Σ, Σ_U²)
     end
 
     if include_Hartree
+        # Hartree term U (n - 1/2); n is the density per spin
         n = compute_occupation(G)
         # We store im * Σ in S.Σ, so we multiply im.
         Σ.data .+= Q((n - 1/2) * bare_vertex(F) * im)
@@ -189,6 +260,21 @@ function SDE_compute!(
     return Σ
 end;
 
+"""
+    SDE_compute_inner!(Σ, G, Lpp, Lph, SGΣ; mode = :threads, use_real_space = true) -> Σ
+
+Close the SDE kernels with one propagator and write the result into `Σ`:
+
+    iΣ(ν, k) = 1/β 1/N_q ∑_{Ω,q} [ iG(Ω - ν, q - k) Lpp(Ω, ν; q) + iG(Ω + ν, q + k) Lph(Ω, ν; q) ]
+
+With `use_real_space = true` the sum over q, a convolution, is done in real
+space. G(R) is taken from the fine mesh of G, the kernels L(R) from the coarse
+vertex mesh. Distances R in [-L/2, L/2]² are summed, with half weight on the
+boundary shell of an even L, and the result is transformed back to the
+momentum mesh of Σ. Otherwise the momentum sum is done directly (Σ and the
+kernels then need the same momentum mesh). Ω runs over the K2 box of the
+kernels, and ν over the frequencies of Σ inside that box.
+"""
 function SDE_compute_inner!(
     Σ     :: NL_MF_G{Q},
     G     :: NL_MF_G{Q},
@@ -210,6 +296,7 @@ function SDE_compute_inner!(
         # Σ( R) += G(-R) * Lpp(R)
         # Σ(-R) += G(-R) * Lph(R)
 
+        # linear sizes of the momentum meshes of G, Σ and the kernels
         LG = bz(meshes(G, Val(2))).L
         LΣ = bz(meshes(Σ, Val(2))).L
         L  = bz(meshes(Lpp, Val(3))).L
@@ -217,18 +304,23 @@ function SDE_compute_inner!(
         n1 = length(meshes(Lpp, Val(1)))
         n2 = length(meshes(Lpp, Val(2)))
 
+        # G(R) and L(R) by FFT over the momentum directions
         G_data_R = fft(reshape(G.data, :, LG, LG), (2, 3)) / LG^2
         Σ_data_R = zeros(eltype(Σ.data), length(meshes(Σ, Val(1))), LΣ, LΣ)
 
         Lpp_data_R = fft(reshape(Lpp.data, n1, n2, L, L), (3, 4)) / L^2
         Lph_data_R = fft(reshape(Lph.data, n1, n2, L, L), (3, 4)) / L^2
 
+        # distances R in [-L/2, L/2]²
         Rs_L_1d = (-div(L, 2)) : div(L, 2)
         Rs = collect(Iterators.product(Rs_L_1d, Rs_L_1d))
 
         for (R1, R2) in Rs
             R_vec = (R1, R2)
 
+            # Half weight on the boundary shell R = ±L/2: L(R) is periodic in L,
+            # so both points read the same kernel value, which is split
+            # evenly between them.
             weight = 1.0
             if mod(L, 2) == 0
                 abs(R1) == div(L, 2) && (weight /= 2)
@@ -260,6 +352,7 @@ function SDE_compute_inner!(
                     for iΩ in eachindex(meshes(Lpp, Val(1)))
                         Ω = value(meshes(Lpp, Val(1))[iΩ])
 
+                        # p channel closed with G(Ω - ν), a and t with G(Ω + ν)
                         if is_inbounds(Ω - ν, meshes(G, Val(1)))
                             Σ_R_pp[ν] += G_R[Ω - ν] * Lpp_R[iΩ, iν] * weight
                         end
@@ -275,8 +368,10 @@ function SDE_compute_inner!(
 
         Σ_data_R .*= T
 
+        # back to momentum space
         Σ.data .= reshape(bfft(Σ_data_R, (2, 3)), :, LΣ^2)
 
+        # impose the symmetries of Σ
         SGΣ(Σ)
 
     else
@@ -284,7 +379,7 @@ function SDE_compute_inner!(
         # Σ(k) += G(P - k) * Lpp(P)
         # Σ(k) += G(P + k) * Lph(P)
 
-        # model the diagram
+        # iΣ(ν, k) for one point: sum over the bosonic frequency and momentum
         @inline function diagram(wtpl)
 
             ν, k = wtpl
@@ -329,7 +424,18 @@ function SDE_compute_inner!(
     return Σ
 end
 
+# -----------------------------------------------------------------------------
+# Second-order self-energy
+# -----------------------------------------------------------------------------
 
+"""
+    SDE_U2_using_Π(Σ::NL_MF_G, G, Πpp, Πph, SGΣ, U; mode) -> Σ_U²
+
+Lattice version of the second-order self-energy built from the bubbles (see
+the local method in SDE.jl). NOTE: it sums over a fourth (fermionic momentum)
+dimension of the bubbles, but the NL bubbles `NL_MF_Π` have only three
+dimensions, so this does not work. It is not used by the solvers.
+"""
 function SDE_U2_using_Π(
     Σ   :: NL_MF_G{Q},
     G   :: NL_MF_G{Q},
@@ -355,7 +461,7 @@ function SDE_U2_using_Π(
 
     meshK_G = meshes(G, Val(2))
 
-    # model the diagram
+    # iΣ_U²(ν, k) for one point
     @inline function diagram(wtpl)
 
         ν, k = wtpl
@@ -397,6 +503,17 @@ function SDE_U2_using_Π(
 end
 
 
+"""
+    SDE_U2_using_G(Σ::NL_MF_G, G, SGΣ, U; mode = :threads) -> Σ_U²
+
+Lattice version of the second-order self-energy (Lihm 2025, Eq. (S46)). In real
+space the diagram is a product at each distance R:
+
+    iΣ_U²(ν, R) = U² · 1/β² ∑_{ν1,ν2} iG(ν1, -R) iG(ν2, R) iG(ν1 - ν2 + ν, R)
+
+It is computed for all R of the fine mesh of G and transformed back to
+momentum space.
+"""
 function SDE_U2_using_G(
     Σ   :: NL_MF_G{Q},
     G   :: NL_MF_G{Q},
@@ -412,6 +529,7 @@ function SDE_U2_using_G(
     Σ_U² = copy(Σ)
     set!(Σ_U², 0)
 
+    # G(R) and G(-R) from the two FFT directions
     L = bz(meshes(G, Val(2))).L
     G_pR =  fft(reshape(G.data, :, L, L), (2, 3)) / L^2
     G_mR = bfft(reshape(G.data, :, L, L), (2, 3)) / L^2
@@ -430,6 +548,7 @@ function SDE_U2_using_G(
             for iν in eachindex(meshes(Σ, Val(1)))
                 ν = value(meshes(Σ, Val(1))[iν])
 
+                # the third propagator must lie on the G mesh too
                 if is_inbounds(ω1 - ω2 + ν, meshes(G, Val(1)))
                     Σ_U²_R[iν, iR1, iR2] += gg * Gp[ω1 - ω2 + ν]
                 end
@@ -439,6 +558,7 @@ function SDE_U2_using_G(
 
     Σ_U²_R .*= U^2 * T^2
 
+    # back to momentum space, then impose the symmetries
     Σ_U².data .= reshape(bfft(Σ_U²_R, (2, 3)), :, L^2)
 
     SGΣ(Σ_U²)
@@ -446,7 +566,17 @@ function SDE_U2_using_G(
     Σ_U²
 end;
 
+# -----------------------------------------------------------------------------
+# Diagnostics
+# -----------------------------------------------------------------------------
 
+"""
+    self_energy_sanity_check(Σ::NL_MF_G) -> Bool
+
+Causality check of a lattice self-energy at every momentum: Im Σ(iν, k) ≤ 0 for
+ν > 0 and ≥ 0 for ν < 0, i.e. the stored `real(iΣ)` ≥ 0 for ν > 0 and ≤ 0 for
+ν < 0. Warns at every violation and returns whether all passed.
+"""
 function self_energy_sanity_check(Σ :: NL_MF_G)
     passed = true
     # sanity check
