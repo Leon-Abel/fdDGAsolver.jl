@@ -1,21 +1,34 @@
+# =============================================================================
+# Bare propagator and band of the Hubbard model on the square lattice.
+#
+# Lihm 2025, Eq. (7): H = -∑_{ij,σ} (t_ij + μ δ_ij) c†_iσ c_jσ + U ∑_i n_i↑ n_i↓,
+# with hopping t1 = t to nearest, t2 = t′ to next-nearest and t3 = t″ to
+# third-nearest neighbors. The bare propagator G₀(k, iν) = 1/(iν + μ - ε(k))
+# contains only the hopping and μ; the interaction U enters through the vertex.
+#
+# Conventions: the propagator is stored multiplied by i (see dyson.jl). The
+# self-energy is stored without its half-filling Hartree value U/2, so the μ
+# used here is the paper's μ minus U/2. With t2 = t3 = 0, μ = 0 is half
+# filling.
+# =============================================================================
+
 """
-    hubbard_bare_Green(mesh_ν::FMesh, mesh_k::KMesh, ::Type{Q} = ComplexF64; μ, t1, t2 = 0., t3 = 0.)
+    hubbard_bare_Green(mesh_ν, mesh_k, Q = ComplexF64; μ, t1, t2 = 0, t3 = 0) -> MeshFunction
 
-Bare (non-interacting) Green function of the 2D square lattice Hubbard model in
-momentum-frequency space, defined as
- 
-    G₀(k, iν) = 1 / (iν + μ - ε(k))
- 
-- `μ`  : Chemical potential. For nearest-neighbor hopping only (t2=t3=0), μ=0
-         corresponds to half filling (one electron per site) due to particle-hole
-         symmetry of the square lattice.
-- `t1` : First nearest-neighbor (NN) hopping amplitude.
-- `t2` : Second nearest-neighbor (NNN) hopping amplitude.
-- `t3` : Third nearest-neighbor (3NN) hopping amplitude.
+Bare propagator of the square-lattice Hubbard model on the fermionic Matsubara
+mesh `mesh_ν` and the momentum mesh `mesh_k`, stored as `iG₀(iν, k)` with
 
-The result is stored as `im * G₀` (i.e., the function returns `im * G₀`) to make
-the stored quantity purely real at half filling, which simplifies symmetry enforcement
-and numerical operations throughout the solver.
+    G₀(iν, k) = 1 / (iν + μ - ε(k))
+
+and the band `ε(k)` from [`hubbard_band`](@ref).
+
+- `μ`: chemical potential, without the Hartree term U/2 (see the file header).
+  For t2 = t3 = 0, `μ = 0` is half filling (one electron per site), by the
+  particle-hole symmetry of the nearest-neighbor square lattice.
+- `t1`, `t2`, `t3`: hopping to the first, second and third neighbors
+  (Lihm 2025: t1 = t = 1 sets the energy unit, t2 = t′).
+
+Storing iG₀ instead of G₀ makes the stored values real at half filling.
 """
 function hubbard_bare_Green(
     mesh_ν :: FMesh,
@@ -28,18 +41,18 @@ function hubbard_bare_Green(
     G0 = MeshFunction(mesh_ν, mesh_k; data_t = Q)
 
     for k in mesh_k
-        # Obtain the Cartesian components of the BZ wavevector k = (k1, k2)
+        # Cartesian components of the momentum k = (k1, k2)
         k1, k2 = euclidean(k, mesh_k)
 
-        # Evaluate the non-interacting dispersion ε(k) for this momentum point.
+        # band energy ε(k) at this momentum
         εk = hubbard_band(k1, k2; t1, t2, t3)
         for ν in mesh_ν
 
-            # extract the real frequency value iν_n = 2π(n + 1/2) * T as a Float.
+            # the real number ν_n = πT(2n + 1)
             ν_value = plain_value(ν)
 
             # Bare Green function: G₀(k, iν) = 1 / (iν + μ - ε(k)).
-            # Store im * G₀ so that the stored object is real.
+            # Store im * G₀ so that the stored object is real at half filling.
             G0[ν, k] = 1 / (im * ν_value + μ - εk) * im
         end
     end
@@ -48,16 +61,12 @@ function hubbard_bare_Green(
 end
 
 """
-    hubbard_band(k1::Float64, k2::Float64; t1, t2=0., t3=0.) :: Float64
- 
-Single-particle dispersion relation ε(k) of the 2D square lattice Hubbard model,
-including up to third nearest-neighbor hopping:
- 
-    ε(k) = -2t₁[cos(k₁) + cos(k₂)] - 4t₂ cos(k₁)cos(k₂) - 2t₃[cos(2k₁) + cos(2k₂)]
- 
-- `k1`, `k2` : Cartesian components of the crystal momentum..
-- `t1`       : First nearest-neighbor hopping.
-- `t2`       : Second nearest-neighbor hopping. Default: 0.
+    hubbard_band(k1, k2; t1, t2 = 0, t3 = 0) -> ε
+
+Band energy of the square lattice with hopping to the first three neighbor
+shells, at the momentum `(k1, k2)` (Cartesian components):
+
+    ε(k) = -2t1 [cos(k1) + cos(k2)] - 4t2 cos(k1) cos(k2) - 2t3 [cos(2k1) + cos(2k2)]
 """
 function hubbard_band(
     k1 :: Float64,
