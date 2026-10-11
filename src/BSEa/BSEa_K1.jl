@@ -13,7 +13,7 @@
 # Sending both outer fermionic frequencies to infinity gives the K1 equation
 # (Eq. (S29a), mirrored):
 #
-#   K̃1_r(Ω) = 1/β Σ_ν̃ F_01̄2(Ω, ν̃) [ Π̃_r(Ω, ν̃) f_012(Ω, ν̃)
+#   K̃1_r(Ω) = 1/β ∑_ν̃ F_01̄2(Ω, ν̃) [ Π̃_r(Ω, ν̃) f_012(Ω, ν̃)
 #                                   + Π_r(Ω, ν̃) FL_012(Ω, ν̃) ]
 #
 #   F_01̄2(Ω, ν̃) = F(Ω, ∞, ν̃)    target vertex, left outer leg at infinity
@@ -27,7 +27,7 @@
 # channel r goes to infinity.
 #
 # Paper ↔ code: ω (bosonic) ↔ Ω; ν̃ (summed) ↔ ω; f, π ↔ F0, Π0;
-# F_01̄2 ↔ F(Ω, νInf, ω); 1/β Σ_ν̃ ↔ temperature(F) * sum. The argument `sign`
+# F_01̄2 ↔ F(Ω, νInf, ω); 1/β ∑_ν̃ ↔ temperature(F) * sum. The argument `sign`
 # absorbs the channel sign and the minus sign of the stored bubble
 # Π = (iG)(iG) (BSE_templates.jl, docs Sec. 3).
 # =============================================================================
@@ -39,7 +39,7 @@ Compute the fd K1 class `K̃1_r(Ω)` of channel `Ch` and write it into `K1`
 (Lihm 2025, Eq. (S29a) in the mirrored form; see the file header).
 
 - `F0`, `Π0`: reference vertex f and bubble π (e.g. from DMFT).
-- `F`, `Π`: target vertex `F = f + Σ_r Φ̃_r` and bubble Π.
+- `F`, `Π`: target vertex `F = f + ∑_r Φ̃_r` and bubble Π.
 - `FL`: the left part `Ĩ_r π_r f`, computed before by `BSE_L_K2!`.
 - `Sp`: spin component; `pSp` in the a and p channels, `dSp` (density) in the
   t channel.
@@ -103,7 +103,7 @@ function BSE_K1!(
             end
         end
 
-        # 1/β Σ_ν̃, and the channel sign
+        # 1/β ∑_ν̃, and the channel sign
         return temperature(F) * val * sign
     end
 
@@ -124,7 +124,7 @@ When the right outer frequency goes to infinity, the irreducible vertex next to
 it reduces to the bare interaction U (Lihm 2025, Eq. (S23a): `K1 = F₀ Π F_012`,
 here mirrored). Doing this for target and reference and subtracting gives
 
-    K̃1_r(Ω) = 1/β Σ_ν̃ [ F_01̄2(Ω, ν̃) Π_r(Ω, ν̃) - f_01̄2(Ω, ν̃) π_r(Ω, ν̃) ] U
+    K̃1_r(Ω) = 1/β ∑_ν̃ [ F_01̄2(Ω, ν̃) Π_r(Ω, ν̃) - f_01̄2(Ω, ν̃) π_r(Ω, ν̃) ] U
 
 This needs neither the left part `FL` nor Ĩ. `U` is the bare vertex of spin
 component `Sp`. The arguments are as in [`BSE_K1!`](@ref); `is_mfRG` is
@@ -167,7 +167,7 @@ function BSE_K1_new!(
             val += (Fl * Πslice[i] - F0l * Π0slice[i]) * U
         end
 
-        # 1/β Σ_ν̃, and the channel sign
+        # 1/β ∑_ν̃, and the channel sign
         return temperature(F) * val * sign
     end
 
