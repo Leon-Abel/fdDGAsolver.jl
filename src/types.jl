@@ -17,7 +17,7 @@
 #   fermionic frequencies ν, ν′  ↔  ν, νp
 #   bosonic momentum q           ↔  P
 #   fermionic momenta k, k′      ↔  k, kp
-#   Φ_r (Φ̃_r in fd runs)         ↔  γa, γp, γt
+#   Φ_r (Φ̃_r in fd runs)         ↔  the vertex fields `γa`, `γp`, `γt`
 # =============================================================================
 
 # -----------------------------------------------------------------------------
