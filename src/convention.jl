@@ -16,7 +16,7 @@
 # fermionic momenta k, k′.
 #
 # Paper ↔ code: ω ↔ Ω (the drawings below keep the paper's ω), ν′ ↔ νp,
-# q ↔ P (called Q in convert_momentum), k′ ↔ kp.
+# q ↔ P, k′ ↔ kp.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
