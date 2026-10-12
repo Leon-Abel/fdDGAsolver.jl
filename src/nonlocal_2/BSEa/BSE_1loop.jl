@@ -1,4 +1,28 @@
-# Note: K1 contributions to left and right part always vanish
+# =============================================================================
+# One-loop Bethe-Salpeter kernels, solver NL2 (strategy :fdPA_1loop).
+#
+# As for the NL solver (nonlocal/BSEa/BSE_1loop.jl): only the first term of the
+# mirrored fd-BSE (Lihm 2025, Eq. (5)) is kept, Φ̃_r ≈ F Π̃_r f. Per class:
+#
+#   K̃1 = F_01̄2 Π̃ f_012,   K̃2 = (F - F_01̄2) Π̃ f_012,   K̃3 = (F - F_01̄2) Π̃ (f - f_012).
+#
+# K1 and K2 sum over the internal ν̃ and k̃ as in nonlocal_2/BSEa/BSEa_K1.jl and
+# BSEa_K2.jl; K3 uses the s-wave caches and the k-averaged bubbles. With
+# is_mfRG = Val(true) the kernels compute the same linearized terms as the full
+# kernels, because the preconditioner (mfRG.jl) needs them.
+#
+# NOTE: BSE_K2_1loop! also adds the left part FL.K2, but the :fdPA_1loop sweep
+# does not recompute FL, so FL holds whatever was last stored there (e.g. by
+# the preconditioner). BSE_K3_1loop! leaves the left part out (commented out).
+# =============================================================================
+
+"""
+    BSE_K1_1loop!(K1::NL_MF_K1, F0, F, FL, Π0::NL2_MF_Π, Π::NL2_MF_Π, SG, sign, ::Type{Ch}, ::Type{Sp}, is_mfRG = Val(false); mode = :serial) -> nothing
+
+K1 class from the one-loop term only,
+`K̃1(Ω; q) = 1/β 1/N_k ∑_{ν̃,k̃} F_01̄2 Π̃ f_012` (see the file header). With
+`is_mfRG = Val(true)`: `f_01̄2 π FL_012`, as in [`BSE_K1!`](@ref).
+"""
 function BSE_K1_1loop!(
     K1   :: NL_MF_K1{Q},
     F0   :: Union{RefVertex{Q}, AbstractVertex{Q}},
@@ -15,7 +39,7 @@ function BSE_K1_1loop!(
     mode :: Symbol = :serial
     ) where {Q, Ch <: ChannelTag, Sp <: SpinTag}
 
-    # model the diagram
+    # K̃1(Ω; q) for one point: sum over ν̃ (called ω) and k̃ (called q)
     @inline function diagram(wtpl)
 
         Ω, P    = wtpl
@@ -37,25 +61,35 @@ function BSE_K1_1loop!(
                 val += Fl * Π0slice[i] * FLr
 
             else
-                # fdDΓA for the K1 class
+                # fdDΓA for the K1 class, one-loop term only
                 # vertices
                 Fl  = F( Ω, νInf, ω, P, k0,  q, Ch, Sp)
                 F0r = F0(Ω, _crossing(Ω, ω, Ch), νInf, P, _crossing(P, q, Ch), k0, Ch, Sp)
 
+                # 1ℓ part
                 val += Fl * (Πslice[i] - Π0slice[i]) * F0r
             end
         end
 
+        # 1/β 1/N_k ∑_{ν̃,k̃}, and the channel sign
         return temperature(F) * val / numP(F) * sign
     end
 
-    # compute K1
+    # evaluate one point per symmetry class; the symmetry group fills in the rest
     SG(K1, InitFunction{2, Q}(diagram); mode)
 
     return nothing
 end
 
 
+"""
+    BSE_K2_1loop!(K2::NL2_MF_K2, F0, F, FL, Π0::NL2_MF_Π, Π::NL2_MF_Π, SG, sign, ::Type{Ch}, ::Type{Sp}, is_mfRG = Val(false); mode = :serial) -> nothing
+
+K2 class from the one-loop term,
+`K̃2(Ω, ν; q, k) = 1/β 1/N_k ∑_{ν̃,k̃} (F - F_01̄2) Π̃ f_012`, plus the left part
+`FL.K2` (see the NOTE in the file header). With `is_mfRG = Val(true)` it
+computes the linearized form as in [`BSE_K2!`](@ref).
+"""
 function BSE_K2_1loop!(
     K2   :: NL2_MF_K2{Q},
     F0   :: Union{RefVertex{Q}, AbstractVertex{Q}},
@@ -72,7 +106,7 @@ function BSE_K2_1loop!(
     mode :: Symbol = :serial
     ) where {Q, Ch <: ChannelTag, Sp <: SpinTag}
 
-    # model the diagram
+    # K̃2(Ω, ν; q, k) for one point: sum over ν̃ (called ω) and k̃ (called q)
     @inline function diagram(wtpl)
 
         Ω, ν, P, k = wtpl
@@ -107,12 +141,14 @@ function BSE_K2_1loop!(
             end
         end
 
+        # 1/β 1/N_k ∑_{ν̃,k̃}, and the channel sign
         return temperature(F) * val / numP(F) * sign
     end
 
-    # compute K2
+    # evaluate one point per symmetry class; the symmetry group fills in the rest
     SG(K2, InitFunction{4, Q}(diagram); mode)
 
+    # add the left part FL.K2 (see the NOTE in the file header)
     if Ch === tCh
         mult_add!(K2, FL.γt.K2, 2)
         mult_add!(K2, FL.γa.K2, -1)
@@ -123,6 +159,14 @@ function BSE_K2_1loop!(
     return nothing
 end
 
+"""
+    BSE_K3_1loop!(K3::NL_MF_K3, FL, cache_Γ, cache_F, cache_F0, Π0::NL2_MF_Π, Π::NL2_MF_Π, SG, sign1, sign2, ::Type{Ch}, ::Type{Sp}, is_mfRG = Val(false); mode = :serial) -> nothing
+
+K3 class from the one-loop term only, `K̃3 = 1/β ∑_ν̃ (F - F_01̄2) Π̃ (f - f_012)`,
+from the caches and the k-averaged bubbles (the left part is not added). With
+`is_mfRG = Val(true)` it computes the right and central parts of the
+linearized form, as in [`BSE_K3!`](@ref).
+"""
 function BSE_K3_1loop!(
     K3       :: NL_MF_K3{Q},
     FL       :: AbstractVertex{Q},
@@ -141,7 +185,7 @@ function BSE_K3_1loop!(
     mode     :: Symbol = :serial
     ) where {Q, Ch <: ChannelTag, Sp <: SpinTag}
 
-    # model the diagram
+    # K̃3(Ω, ν, ν′; q) for one point: sum over ν̃ (called ω) on the K3 box
     @inline function diagram(wtpl)
 
         Ω, ν, νp, P = wtpl
@@ -160,6 +204,7 @@ function BSE_K3_1loop!(
 
         for i in eachindex(Fslice)
             ω = value(meshes(cache_F, Val(3))[i])
+            # bubbles averaged over the loop momentum
             Π0_val = Π0[Ω, ω, P, kSW]
             Π_val  = Π[ Ω, ω, P, kSW]
 
@@ -186,6 +231,7 @@ function BSE_K3_1loop!(
             end
         end
 
+        # (left part not added)
         if Ch === aCh || Ch === pCh
             return temperature(FL) * val# + γL.K3[Ω, ν, νp, P]
         else
@@ -194,7 +240,7 @@ function BSE_K3_1loop!(
 
     end
 
-    # compute K3
+    # evaluate one point per symmetry class; the symmetry group fills in the rest
     SG(K3, InitFunction{4, Q}(diagram); mode)
 
     return nothing
