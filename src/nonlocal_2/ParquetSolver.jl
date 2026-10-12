@@ -1,5 +1,40 @@
+# =============================================================================
+# The solver object of the lattice solver NL2.
+#
+# Same layout as the NL solver (nonlocal/ParquetSolver.jl): reference system
+# (G0 = g, Σ0 = σ, F0 = f, bubbles π), target system (G, Σ, F = f + Φ̃, bubbles
+# Π), the bare propagator Gbare, and work buffers. Differences in NL2:
+#   - the vertex channels keep the fermionic momentum in K2,
+#     K2(Ω, ν; q, k) (nonlocal_2/channel.jl);
+#   - the bubbles keep it as well, without the average over k:
+#       Πpp(Ω, ν; q, k) = G(ν, k) G(Ω - ν, q - k)
+#       Πph(Ω, ν; q, k) = G(ν, k) G(Ω + ν, q + k)
+#     (nonlocal_2/bubble.jl). Both momenta live on the coarse vertex mesh;
+#   - the K2 symmetry groups act on both momenta (nonlocal_2/symmetries.jl);
+#   - the type of F can be chosen: NL2_Vertex or NL2_MBEVertex (the
+#     multiboson-exchange form, boson_exchange.jl).
+# K1 and K3 are s-wave, as in NL.
+# =============================================================================
+
+"""
+    NL2_ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
+
+Solver for the fd parquet equations of the Hubbard model in which K2 and the
+bubbles keep the fermionic momentum (solver NL2). The fields are those of the
+[`NL_ParquetSolver`](@ref), with `NL2_Channel` vertex channels and bubbles
+`Π(Ω, ν; q, k)`.
+
+    NL2_ParquetSolver(nK1, nK2, nK3, mK_Γ, Gbare, G0, Σ0, F0, VT = NL2_Vertex; mode = :threads, mΠν_factor = 1)
+
+Build a solver with frequency boxes `nK1`, `nK2`, `nK3` and the momentum mesh
+`mK_Γ` of the vertex and the bubbles. `Gbare`, `G0` and `Σ0` live on the fine
+mesh; `F0` is the reference vertex and `VT` the type of the target vertex F.
+The reference bubbles are computed once from `G0`, with `nK1 * mΠν_factor`
+fermionic frequencies. The target starts from Σ = Σ0 and zero fd channels.
+Call [`init_sym_grp!`](@ref) before solving.
+"""
 mutable struct NL2_ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
-    # Bare Green function
+    # Bare Green function of the target (fine momentum mesh)
     Gbare :: NL_MF_G{Q}
 
     # single-particle Green's function and bubbles for reference system
@@ -21,16 +56,16 @@ mutable struct NL2_ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
     # self-energy for target system
     Σ::NL_MF_G{Q}
 
-    # channel-decomposed two-particle vertex for target system
+    # target vertex F = F0 + fd channels (NL2_Vertex or NL2_MBEVertex)
     F::VT
 
-    # channel-decomposed two-particle vertex buffer
+    # output buffer of one BSE sweep (new fd channels)
     Fbuff::NL2_Vertex{Q, RefVertex{Q}}
 
-    # channel-decomposed two-particle vertex buffer for left part
+    # left part of the BSE, FL = Ĩ π f
     FL::NL2_Vertex{Q, RefVertex{Q}}
 
-    # K2 vertices used in the SDE
+    # SDE kernels (target and reference), shaped like a K2 class
     Lpp  :: NL2_MF_K2{Q}
     Lph  :: NL2_MF_K2{Q}
     L0pp :: NL2_MF_K2{Q}
@@ -51,10 +86,8 @@ mutable struct NL2_ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
     # symmetry groups for the particle-hole channels of FL
     SGphL::Vector{SymmetryGroup}
 
-    # symmetry groups for the particle-particle channel of F0. Used only for fdPA
+    # symmetry groups for the reference SDE kernels (fd runs)
     SG0pp2::SymmetryGroup
-
-    # symmetry groups for the particle-hole channels of F0. Used only for fdPA
     SG0ph2::SymmetryGroup
 
     # Parallelization mode
@@ -73,7 +106,7 @@ mutable struct NL2_ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
     cache_Fa  :: NL_MF_K3{Q}
     cache_Ft  :: NL_MF_K3{Q}
 
-    # constructor
+    # constructor, see the docstring above
     function NL2_ParquetSolver(
         nK1   :: Int64,
         nK2   :: NTuple{2,Int64},
@@ -91,7 +124,7 @@ mutable struct NL2_ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
 
         T = MatsubaraFunctions.temperature(meshes(G0, Val(1)))
 
-        # precompute bubbles for reference system
+        # bubbles π of the reference system, π(Ω, ν; q, k) on the coarse mesh
         mΠΩ = MatsubaraMesh(temperature(F0), nK1, Boson)
         mΠν = MatsubaraMesh(temperature(F0), nK1 * mΠν_factor, Fermion)
         Π0pp = MeshFunction(mΠΩ, mΠν, mK_Γ, mK_Γ; data_t=Q)
@@ -110,7 +143,7 @@ mutable struct NL2_ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
         Πph = copy(Π0pp)
         bubbles_real_space!(Πpp, Πph, G)
 
-        # channel-decomposed two-particle vertex
+        # target vertex (F0 plus zero channels) and BSE output buffer
         F = VT(F0, T, nK1, nK2, nK3, mK_Γ)
         Fbuff = NL2_Vertex(RefVertex(T, 0.0, Q), T, nK1, nK2, nK3, mK_Γ)
 
@@ -120,7 +153,7 @@ mutable struct NL2_ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
         L0pp = copy(Lpp)
         L0ph = copy(Lpp)
 
-        # symmetry groups
+        # placeholder symmetry groups; init_sym_grp! sets the real ones
         SGΣ = SymmetryGroup(Σ)
         SGpp = SymmetryGroup[SymmetryGroup(F.γp.K1), SymmetryGroup(F.γp.K2), SymmetryGroup(F.γp.K3)]
         SGph = SymmetryGroup[SymmetryGroup(F.γp.K1), SymmetryGroup(F.γp.K2), SymmetryGroup(F.γp.K3)]
@@ -153,6 +186,7 @@ mutable struct NL2_ParquetSolver{Q, VT, RefVT} <: AbstractSolver{Q}
     end
 end
 
+# Printing: type, U, temperature, box sizes and number of momenta.
 function Base.show(io::IO, S::NL2_ParquetSolver{Q}) where {Q}
     print(io, "$(nameof(typeof(S))){$Q}, U = $(real(bare_vertex(S.F0, aCh, pSp))), T = $(temperature(S))\n")
     print(io, "F0 K3 : $(numK3(S.F0))\n")
@@ -163,7 +197,18 @@ function Base.show(io::IO, S::NL2_ParquetSolver{Q}) where {Q}
 end
 
 
-# Construct for parquet approximation
+# -----------------------------------------------------------------------------
+# Parquet approximation for the Hubbard model
+# -----------------------------------------------------------------------------
+
+"""
+    parquet_solver_hubbard_parquet_approximation_NL2(nG, nK1, nK2, nK3, mK_G, mK_Γ, Q = ComplexF64; T, U, μ, t1, t2 = 0, t3 = 0, mode = :threads, VT = NL2_Vertex) -> NL2_ParquetSolver
+
+Solver NL2 for the parquet approximation (PA) of the Hubbard model: bare
+reference g = σ = 0 and f = U. Arguments as for
+[`parquet_solver_hubbard_parquet_approximation`](@ref); `VT` is the type of the
+target vertex (`NL2_Vertex` or `NL2_MBEVertex`).
+"""
 function parquet_solver_hubbard_parquet_approximation_NL2(
     nG::Int64,
     nK1::Int64,
@@ -196,7 +241,18 @@ function parquet_solver_hubbard_parquet_approximation_NL2(
 end
 
 
-# symmetry group initialization
+# -----------------------------------------------------------------------------
+# Symmetry groups
+# -----------------------------------------------------------------------------
+
+"""
+    init_sym_grp!(S::NL2_ParquetSolver) -> nothing
+
+Build the symmetry groups of the NL2 solver as for the NL solver, except that
+the K2 groups (and those of the reference SDE kernels) use the symmetries of
+K2(Ω, ν; q, k), which act on both momenta (`nonlocal_2/symmetries.jl`). K1 and K3
+keep the s-wave symmetries. Call this once before solving.
+"""
 function init_sym_grp!(
     S::NL2_ParquetSolver
 )::Nothing
@@ -234,6 +290,7 @@ function init_sym_grp!(
         Symmetry{4}(w -> sK3_rot(w, mK_Γ)),
     ], S.F.γp.K3)
 
+    # left part: without ν ↔ ν′
     S.SGppL[1] = S.SGpp[1]
     S.SGppL[2] = S.SGpp[2]
     S.SGppL[3] = my_SymmetryGroup([
@@ -243,7 +300,7 @@ function init_sym_grp!(
         Symmetry{4}(w -> sK3_rot(w, mK_Γ)),
     ], S.F.γp.K3)
 
-    # particle-hole channels
+    # particle-hole channels (K1 symmetries as in the p channel)
 
     S.SGph[1] = S.SGpp[1]
 
@@ -272,7 +329,7 @@ function init_sym_grp!(
     ], S.F.γt.K3)
 
 
-    # Symmetry group of F0, needed for the BSE of the reference vertex in SDE for fdPA
+    # reference SDE kernels (SG0ph2 is built on L0pp, which has the same mesh as L0ph)
     S.SG0pp2 = my_SymmetryGroup([
         Symmetry{4}(w -> sK2_NL2_pp1(w, mK_Γ)),
         Symmetry{4}(w -> sK2_NL2_pp2(w, mK_Γ)),
@@ -290,6 +347,8 @@ function init_sym_grp!(
     return nothing
 end
 
+# Trivial symmetry groups; the same as the generic reset_sym_grp!
+# (ParquetSolver.jl).
 function reset_sym_grp!(S :: NL2_ParquetSolver)
     (; F, Σ) = S
 
@@ -302,10 +361,20 @@ function reset_sym_grp!(S :: NL2_ParquetSolver)
     return nothing
 end
 
-# getter methods (some of them is defined for AbstractSolver)
+# -----------------------------------------------------------------------------
+# Getters and bubbles
+# -----------------------------------------------------------------------------
+
+# Number of momenta of the fine (G, Σ) and the coarse (vertex) mesh.
 numP_G(S::NL2_ParquetSolver)::Int64 = length(meshes(S.G, Val(2)))
 numP_Γ(S::NL2_ParquetSolver)::Int64 = numP(S.F)
 
+"""
+    bubbles!(S::NL2_ParquetSolver)
+
+Update the target bubbles `S.Πpp`, `S.Πph` (Π(Ω, ν; q, k)) from `S.G` by
+real-space convolution ([`bubbles_real_space!`](@ref)).
+"""
 function bubbles!(S :: NL2_ParquetSolver)
     bubbles_real_space!(S)
     # bubbles_momentum_space!(S)
