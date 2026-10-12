@@ -1,54 +1,118 @@
+# =============================================================================
+# Multi-boson exchange (MBE) form of the vertex.
+#
+# The K3 class of each channel contains a part that factorizes into two K2
+# classes joined by a boson propagator (Lihm 2025, Eqs. (S24)-(S25)):
+#
+#   K3_r = M_r + K2_r W_r⁻¹ K̄2_r,        W_r = U_r + K1_r,
+#
+# with U_r the bare vertex in that channel. The single-boson exchange (SBE)
+# part S_r = U_r + K1_r + K2_r + K̄2_r + K2_r W_r⁻¹ K̄2_r describes one boson (a
+# collective fluctuation) exchanged between the electrons; M_r is the
+# multi-boson rest, typically more compact in frequency than K3_r. An MBE
+# vertex (MBEVertex, NL2_MBEVertex) stores M_r in the K3 slot of its channels
+# and evaluates each channel as
+#
+#   Φ_r = K1 + K2 + K̄2 + K2 K̄2 / (U_r + K1) + M_r.
+#
+# Its fd equation for M_r is Lihm 2025, Eq. (S31): the K3 kernels with the MBE
+# caches below. The U-closed strategies :fdPA_new and :scPA_new (solve.jl) are
+# meant for MBE vertices.
+#
+# The SBE factorization holds in the spin channels in which the BSE is
+# diagonal. In the t channel these are the density D and magnetic M
+# combinations, so the t channel is evaluated from its D and M parts
+# (U_D = U, U_M = -U). The p channel uses the pSp form, which equals the
+# singlet form when the triplet K1 and K2 vanish (as for the local vertex).
+#
+# Class tags (ClassTag) select one asymptotic class of a vertex:
+#   K1Cl   K1(Ω)            K2Cl   K2(Ω, ν)         K2pCl  K̄2(Ω, ν′)
+#   K3Cl   K3(Ω, ν, ν′)     ΛCl    the core of the RefVertex (without U), i.e.
+#                                  the part that is not split into channels
+# Evaluating a vertex at a class sums that class over the nested levels
+# F → F.F0 → …, so the MBE formula acts on the total classes.
+#
+# Also here: conversion between the asymptotic and the MBE form
+# (asymptotic_to_mbe, mbe_to_asymptotic) and the K3 caches of MBE solvers.
+#
+# Paper ↔ code: ω ↔ Ω; ν′ ↔ νp (or ω); q ↔ P; K̄2 ↔ K2' (class K2pCl);
+# S_r ↔ ∇; M_r ↔ the K3 slot of an MBE channel; Φ_r ↔ the fields γp, γt, γa.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Class tags
+# -----------------------------------------------------------------------------
+
 """
     abstract type ClassTag end
 
-Abstract type for asymptotic classes
+Tag for one asymptotic class of a vertex (see the file header). Passed in
+place of the spin tag to evaluate a single class.
 """
 abstract type ClassTag end
 
 """
     struct K1Cl <: ClassTag end
 
-K1 class
+K1 class: K1(Ω), depends on the bosonic frequency only.
 """
 struct K1Cl <: ClassTag end
 
 """
     struct K2Cl <: ClassTag end
 
-K2 class
+K2 class: K2(Ω, ν), depends on Ω and the first fermionic frequency ν.
 """
 struct K2Cl <: ClassTag end
 
 """
     struct K2pCl <: ClassTag end
 
-K2' class
+K̄2 class (K2'): K̄2(Ω, ν′), depends on Ω and the second fermionic frequency
+ν′. It is read from the same K2 array (K̄2 = K2 by the symmetry ν ↔ ν′).
 """
 struct K2pCl <: ClassTag end
 
 """
     struct K3Cl <: ClassTag end
 
-K3 class
+K3 class: K3(Ω, ν, ν′). In an MBE vertex this slot holds the multi-boson rest
+`M_r`.
 """
 struct K3Cl <: ClassTag end
 
 """
     struct ΛCl <: ClassTag end
 
-Λ class. 2-particle irreducible vertex.
+Λ class: the part of the vertex that is not split into channels, i.e. the
+core of the RefVertex (without U). It is zero in the PA. For DMFT input it
+holds `(Λ - U) + ∑_r K3_r` (refvertex.jl); after [`asymptotic_to_mbe`](@ref) it
+holds `(Λ - U) + ∑_r M_r`.
 """
 struct ΛCl <: ClassTag end
 
-_crossing(::Type{K1Cl}) = K1Cl
-_crossing(::Type{K2Cl}) = K2pCl
+# Maps each asymptotic class to its counterpart under the crossing (exchange) symmetry.
+# K2 ↔ K2' because crossing swaps ν ↔ ν'; all other classes are self-conjugate.
+# Not used anywhere. (BSE_templates.jl defines an unrelated _crossing for
+# frequencies and momenta.)
+_crossing(::Type{K1Cl})  = K1Cl
+_crossing(::Type{K2Cl})  = K2pCl
 _crossing(::Type{K2pCl}) = K2Cl
-_crossing(::Type{K3Cl}) = K3Cl
-_crossing(::Type{ΛCl}) = ΛCl
+_crossing(::Type{K3Cl})  = K3Cl
+_crossing(::Type{ΛCl})   = ΛCl
 
+# -----------------------------------------------------------------------------
+# Class evaluators: one class of one channel or of a RefVertex
+# -----------------------------------------------------------------------------
 
-# Evaluation for the given asymptotic class
+"""
+    (γ::Channel)(Ω, ν, ν', P, k, k', ::Type{Cl})
+    (γ::Channel)(Ω, ν, ν', ::Type{Cl})
 
+Evaluates the channel `γ` at the given asymptotic class `Cl`.
+Momentum arguments are accepted but ignored for the local `Channel` type.
+Returns zero for the `ΛCl` class (that part lives in the RefVertex).
+"""
 @inline function (γ :: Channel{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -80,6 +144,7 @@ _crossing(::Type{ΛCl}) = ΛCl
 
 end
 
+# Channel class evaluator without momenta, see the docstring above.
 @inline function (γ :: Channel{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -108,6 +173,14 @@ end
 
 end
 
+"""
+    (γ::ChannelViewX2X)(Ω, ν, ν', ::Type{Cl})
+
+Evaluates the `ChannelViewX2X` channel at the given asymptotic class `Cl`.
+Unlike `Channel`, this view stores K2 and K2' separately: with the momenta
+fixed, they are slices of the same K2 array at different fermionic momenta
+(k and k′; `fixed_momentum_view.jl`).
+"""
 @inline function (γ :: ChannelViewX2X{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -121,6 +194,7 @@ end
     elseif Cl === K2Cl
         return γ.K2(Ω, ν)
 
+    # K2' stored separately (slice at the second fermionic momentum)
     elseif Cl === K2pCl
         return γ.K2p(Ω, νp)
 
@@ -137,6 +211,13 @@ end
 end
 
 
+"""
+    (γ::NL2_Channel)(Ω, ν, ν', P, k, k', ::Type{Cl})
+
+Evaluates the nonlocal channel `γ` at the given asymptotic class `Cl`.
+The bosonic momentum `P` enters K1–K3; the fermionic momenta `k`, `k'` enter K2, K2'.
+K3 is s-wave (no fermionic momenta). Returns zero for the `ΛCl` class.
+"""
 @inline function (γ :: NL2_Channel{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -168,6 +249,17 @@ end
 
 end
 
+"""
+    (F::RefVertex)(Ω, ν, ν', P, k, k', ::Type{pCh}, ::Type{Cl})
+    (F::RefVertex)(Ω, ν, ν', P, k, k', ::Type{tCh}, ::Type{Cl})
+    (F::RefVertex)(Ω, ν, ν', P, k, k', ::Type{aCh}, ::Type{Cl})
+
+Class evaluator of the RefVertex, parallel spin component, in the
+parametrization of the p (parallel), t (transverse) or a (antiparallel)
+channel. For `ΛCl` it returns the core, read from the p- or t-channel box,
+without U (the MBE evaluator adds U itself). All other classes return zero,
+because the RefVertex is not split into channels. Momenta are ignored.
+"""
 @inline function (F :: RefVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -187,6 +279,7 @@ end
     end
 end
 
+# t channel: core from the t-channel box, see the docstring above.
 @inline function (F :: RefVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -209,6 +302,9 @@ end
 
 
 
+# a channel: crossing symmetry with the t channel, as in refvertex.jl,
+#   Λ^=_a(Ω, ν, ν′) = -Λ^×_t(Ω, ν′, ν)
+# (the swap ν ↔ ν′ and the minus sign). See the docstring above.
 @inline function (F :: RefVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -229,17 +325,32 @@ end
 end
 
 
+# -----------------------------------------------------------------------------
+# MBE vertex types
+# -----------------------------------------------------------------------------
 
-# -------------------------------------------------------------------------- #
+"""
+    abstract type AbstractMBEVertex{Q} <: AbstractVertex{Q}
 
+Abstract base type for MBE vertices.  Concrete subtypes store a reference vertex `F0`
+and three channel-reducible contributions `γp`, `γt`, `γa`.
+"""
 abstract type AbstractMBEVertex{Q} <: AbstractVertex{Q} end
 
+"""
+    struct MBEVertex{Q, VT} <: AbstractMBEVertex{Q}
+
+Local (momentum-independent) MBE vertex.  Holds a reference vertex `F0` of type `VT`
+and three local `Channel{Q}` objects for the p, t, and a channels. The K3 slots
+of the channels hold the multi-boson rest `M_r` (see the file header).
+"""
 struct MBEVertex{Q, VT} <: AbstractMBEVertex{Q}
     F0 :: VT
     γp :: Channel{Q}
     γt :: Channel{Q}
     γa :: Channel{Q}
 
+    # build MBEVertex from reference Vertex and pre-defined channels
     function MBEVertex(
         F0 :: VT,
         γp :: Channel{Q},
@@ -250,6 +361,8 @@ struct MBEVertex{Q, VT} <: AbstractMBEVertex{Q}
         return new{Q, VT}(F0, γp, γt, γa)
     end
 
+    # build MBEVertex from reference Vertex and frequency-box sizes
+    # channels are initialized empty
     function MBEVertex(
         F0    :: VT,
         T     :: Float64,
@@ -265,8 +378,18 @@ struct MBEVertex{Q, VT} <: AbstractMBEVertex{Q}
     end
 end
 
+# An MBEVertex stores its channels as Channel objects (used by load_vertex).
 channel_type(::Type{MBEVertex}) = Channel
 
+"""
+    (F::Union{Channel,RefVertex,Vertex})(Ω, ν, ν', P, k, k', ::Type{Ch}, ::Type{Cl})
+
+Evaluates the vertex `F` at the given channel `Ch` and asymptotic class `Cl` by
+adding the reference vertex contribution `F.F0` and the channel-reducible
+part `γr` for channel `r = Ch`. In practice this serves the local `Vertex` (the
+RefVertex and the channels have their own methods above); `F.F0` is evaluated
+the same way, so the class is summed over all nested levels.
+"""
 @inline function (F :: Union{Channel{Q}, RefVertex{Q}, Vertex{Q}})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -278,7 +401,7 @@ channel_type(::Type{MBEVertex}) = Channel
        :: Type{Cl},
     )  :: Q where {Q, Ch <: ChannelTag, Cl <: ClassTag}
 
-    # Recursively evaluate the Vertex `F` and its RefVertex `F.F0`
+    # evaluate the Vertex `F` and its RefVertex `F.F0`
     # at the pSp spin component, channel `Ch` and asymptotic class `Cl`
 
     val = F.F0(Ω, ν, νp, P, k, kp, Ch, Cl)
@@ -298,6 +421,13 @@ channel_type(::Type{MBEVertex}) = Channel
     return val
 end
 
+"""
+    (F::AbstractVertex)(Ω, ν, ν', P, k, k', ::Type{Ch}, ::Type{Cl})
+
+Generic fallback — same structure as the `Channel`/`RefVertex`/`Vertex`
+overload above, but accepts any `AbstractVertex` subtype and allows `SWaveBrillouinPoint`
+for the bosonic momentum `P`.
+"""
 @inline function (F :: AbstractVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -309,7 +439,7 @@ end
        :: Type{Cl},
     )  :: Q where {Q, Ch <: ChannelTag, Cl <: ClassTag}
 
-    # Recursively evaluate the Vertex `F` and its RefVertex `F.F0`
+    # evaluate the Vertex `F` and its RefVertex `F.F0`
     # at the pSp spin component, channel `Ch` and asymptotic class `Cl`
 
     val = F.F0(Ω, ν, νp, P, k, kp, Ch, Cl)
@@ -329,6 +459,12 @@ end
     return val
 end
 
+"""
+    (F::MBEVertex)(Ω, ν, ν', ::Type{Ch}, ::Type{Sp}; F0, γp, γt, γa)
+
+Convenience wrapper for the local `MBEVertex`: delegates to the momentum-resolved
+evaluator with all momenta set to the zero point `k0`.
+"""
 function (F::MBEVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -346,6 +482,35 @@ function (F::MBEVertex{Q})(
 end
 
 
+# -----------------------------------------------------------------------------
+# Evaluation of an MBE vertex
+# -----------------------------------------------------------------------------
+
+"""
+    (F::AbstractMBEVertex)(Ω, ν, ν', P, k, k', ::Type{Ch}, ::Type{pSp}; F0, γp, γt, γa)
+
+Evaluates the full MBE vertex in the parallel-spin (pSp) component using:
+
+    F = U + γp + γt + γa + Λ
+
+Each channel contribution follows the SBE formula
+
+    γr = K1 + K2 + K2' + K2·K2'/(U + K1) + K3
+
+converted to the target channel `Ch` via frequency/momentum transformations.
+Here K3 is the stored `M_r`, and each class is the total over the nested levels
+`F → F.F0 → …`, so the formula acts on the total vertex. Λ is the core of the
+RefVertex at the bottom (class `ΛCl`).
+
+The t-channel contribution is split into density (D) and magnetic (M) components,
+in which the SBE formula holds (with U and -U):
+`Φ_t^= = (Φ_D - Φ_M)/2`, with `Φ_M = -Φ_a^=` and `Φ_D = 2Φ_t^= - Φ_a^=` (crossing).
+
+The keywords `γp`, `γt`, `γa` switch channels off. `F0 = false` subtracts
+`F.F0` evaluated with the same switches, so it returns the difference between
+F and its reference vertex, e.g. `Ĩ_r` = (F - f) with channel r off. This is
+how the fd (irreducible) vertices are computed for MBE vertices.
+"""
 function (F::AbstractMBEVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -364,10 +529,12 @@ function (F::AbstractMBEVertex{Q})(
 
     val = zero(Q)
 
+    # bare vertex U (pSp)
     U = bare_vertex(F, Sp)
 
     val += U
 
+    # p channel: total classes at the converted arguments, SBE formula
     if γp
         ωs = convert_frequency(Ω, ν, νp, Ch, pCh)
         ks = convert_momentum( P, k, kp, Ch, pCh)
@@ -400,6 +567,7 @@ function (F::AbstractMBEVertex{Q})(
         val += (K1 + K2 + K2p + K2 * K2p / (U + K1) + K3) / 2
     end
 
+    # a channel: as for p
     if γa
         ωs = convert_frequency(Ω, ν, νp, Ch, aCh)
         ks = convert_momentum( P, k, kp, Ch, aCh)
@@ -412,8 +580,10 @@ function (F::AbstractMBEVertex{Q})(
     end
 
     # Add 2-particle irreducible contribution
+    # (the core of the RefVertex, class ΛCl, without U)
     val += F.F0(Ω, ν, νp, P, k, kp, Ch, ΛCl)
 
+    # F0 = false: difference to the reference vertex, with the same switches
     if F0 == false
         val -= F.F0(Ω, ν, νp, P, k, kp, Ch, Sp; γp, γt, γa)
     end
@@ -421,7 +591,14 @@ function (F::AbstractMBEVertex{Q})(
     return val
 end
 
+"""
+    (F::AbstractMBEVertex)(Ω, ν, ν', P, k, k', ::Type{Ch}, ::Type{xSp}; F0, γp, γt, γa)
 
+Evaluates the vertex in the crossed spin component (xSp), by crossing symmetry
+(Lihm 2025, Eq. (S4a)): `-F^=` at (Ω, ν, Ω - ν′; P, k, P - k′) in the p channel,
+and with the a and t channels exchanged in the a and t channels. The switches
+for t and a swap accordingly, as in nonlocal/vertex.jl.
+"""
 @inline function (F :: AbstractMBEVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -456,6 +633,12 @@ end
 
 
 # evaluators for density spin component
+"""
+    (F::AbstractMBEVertex)(Ω, ν, ν', P, k, k', ::Type{Ch}, ::Type{dSp}; F0, γp, γt, γa)
+
+Evaluates the vertex in the density spin component (dSp) using
+    dSp = 2·pSp + xSp.
+"""
 @inline function (F :: AbstractMBEVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -478,6 +661,18 @@ end
 
 
 
+"""
+    (F::AbstractMBEVertex)(Ω, ν, ν', P, k, kp::SWaveBrillouinPoint, ::Type{Ch}, ::Type{Sp})
+    (F::AbstractMBEVertex)(Ω, ν, ν', P, k::SWaveBrillouinPoint, kp, ::Type{Ch}, ::Type{Sp})
+    (F::AbstractMBEVertex)(Ω, ν, ν', P, k::SWaveBrillouinPoint, kp::SWaveBrillouinPoint, ::Type{Ch}, ::Type{Sp})
+
+Evaluates the vertex with one or both fermionic momenta averaged over the full Brillouin
+zone (s-wave projection).  A `SWaveBrillouinPoint` argument triggers averaging over the
+momentum mesh returned by `get_P_mesh(F)`. The average is an explicit sum over
+the vertex values: the MBE formula is not linear in K2, so the classes cannot
+be averaged first. With both momenta averaged this is a double sum, which is
+expensive.
+"""
 function (F::AbstractMBEVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -505,6 +700,7 @@ function (F::AbstractMBEVertex{Q})(
     return val / length(mK)
 end
 
+# k averaged, see the docstring above.
 function (F::AbstractMBEVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -532,6 +728,7 @@ function (F::AbstractMBEVertex{Q})(
     return val / length(mK)
 end
 
+# k and k′ averaged, see the docstring above.
 function (F::AbstractMBEVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -560,7 +757,11 @@ function (F::AbstractMBEVertex{Q})(
 end
 
 
+"""
+    Base.copy(F::MBEVertex) -> MBEVertex
 
+Returns a deep copy of `F`, with all fields copied independently.
+"""
 function Base.:copy(
     F :: MBEVertex{Q}
     ) :: MBEVertex{Q} where {Q}
@@ -569,10 +770,13 @@ function Base.:copy(
 end
 
 
+"""
+    get_reducible_vertex(F::AbstractVertex, ::Type{Ch})
 
-# -------------------------------------------------------------------------- #
-
-
+Returns the channel-reducible part `γr` of the vertex `F` for channel `r = Ch`,
+i.e. the field `γa`, `γp` or `γt`. Works for every vertex type with these
+fields.
+"""
 function get_reducible_vertex(
     F :: AbstractVertex,
       :: Type{Ch},
@@ -591,11 +795,34 @@ end
 
 
 
-# There are multiple types of vertices to precompute.
-# (1) `cache_F0*`: Channel-U-irreducible vertexof the reference system (`S.F0`)
-#                  Cache ``Tᵣ = Γ - ∇ᵣ = Iᵣ - U + Mᵣ``.
-# (2) `cache_Γ*` : Irreducible finite-difference vertex (`S.F` with `F0=false`, `γ*=false`)
-# (3) `cache_F*` : Channel-U-irreducible vertexof the target system (`S.F`)
+# -----------------------------------------------------------------------------
+# K3 caches of the local MBE solver
+# -----------------------------------------------------------------------------
+
+"""
+    build_K3_cache!(S::ParquetSolver{Q, <:MBEVertex})
+
+Precomputes and caches the vertex combinations needed to update K3 in the MBE parquet
+equations. Three classes of cached quantities are filled:
+
+1. `cache_F0*` — channel-U-irreducible vertex of the reference system `S.F0`:
+   ``T_r = I_r - U + M_r``
+2. `cache_Γ*`  — irreducible finite-difference vertex of the target system `S.F`
+   (evaluated with `F0=false` and the corresponding `γr=false`)
+3. `cache_Fp/Fa/Ft` — channel-U-irreducible vertex of the target system `S.F`:
+   ``T_r = I_r - U + M_r``
+
+`T_r = F - S_r` is the vertex minus its single-boson exchange part `S_r` in channel
+r (f - `s_r` for the reference). These take the place of `f - f_012` and `F - F_01̄2`
+of the plain caches (`build_K3_cache.jl`), and with them the K3 kernels give the
+multi-boson part `M̃_r` (Lihm 2025, Eq. (S31)). For an MBE vertex `F0 = false`
+means `F - F.F0`, so `cache_Γ*` is `Ĩ_r`.
+
+Caches indexed by `(Ω, ω, ν')` are used for bubble contractions from the left;
+caches indexed by `(Ω, ν, ω)` are used for contractions from the right.
+The t-channel entries are converted from the pSp component to the density (dSp)
+component before being stored.  All caches are reduced across MPI ranks.
+"""
 function build_K3_cache!(
     S :: ParquetSolver{Q, <: MBEVertex}
     ) where {Q}
@@ -622,6 +849,7 @@ function build_K3_cache!(
         S.cache_Γpx[i] = S.F( Ω, ω, νp, pCh, xSp; F0=false, γp=false)
 
         # (Iᵣ - U) + Mᵣ
+        # (p channel in xSp: the bare part is -U, and M_p^×(Ω, ν̃, ν′) = -M_p^=(Ω, ν̃, Ω - ν′))
         S.cache_F0p[i] = S.F0(Ω, ω, νp, pCh, xSp; γp = false) + U + S.F0(Ω, ω, Ω - νp, k0, k0, k0, pCh, K3Cl) * -1
         S.cache_F0a[i] = S.F0(Ω, ω, νp, aCh, pSp; γa = false) - U + S.F0(Ω, ω, νp, k0, k0, k0, aCh, K3Cl)
         S.cache_F0t[i] = S.F0(Ω, ω, νp, tCh, pSp; γt = false) - U + S.F0(Ω, ω, νp, k0, k0, k0, tCh, K3Cl)
@@ -669,6 +897,28 @@ function build_K3_cache!(
 end
 
 
+# -----------------------------------------------------------------------------
+# Conversion between the asymptotic and the MBE form
+# -----------------------------------------------------------------------------
+
+"""
+    asymptotic_to_mbe(F::Vertex) -> MBEVertex
+    asymptotic_to_mbe(F::NL2_Vertex) -> NL2_MBEVertex
+
+Converts a vertex stored in the asymptotic (K1/K2/K2'/K3) representation to the MBE
+representation by removing the single-boson-exchange (SBE) contribution from K3 (or
+from the reference vertex `F0` when K3 is smaller than `F0`), so that the residual K3
+is the multi-boson rest `M_r` beyond the SBE part `U + K1 + K2 + K2' + K2·K2'/(U + K1)`.
+
+The second case is the one taken for the DMFT vertex (one-point K3 box, see
+`load_triqs.jl`): there the SBE terms of all channels are taken out of the core,
+which keeps the total vertex unchanged.
+
+NOTE: the K3 case (first case) is exact only if `F.F0` is a bare RefVertex (zero
+core, as in the PA). Otherwise the evaluation of ∇ also contains the core (and,
+for a nested `F.F0`, its channels), which then is subtracted from K3 in every
+channel.
+"""
 function asymptotic_to_mbe(F :: Vertex)
     F_mbe = MBEVertex(copy(F.F0), copy(F.γp), copy(F.γt), copy(F.γa))
 
@@ -676,6 +926,7 @@ function asymptotic_to_mbe(F :: Vertex)
 
     if numK3(F.γa) >= numK3(F.F0)
         # Subtract SBE contribution from K3
+        # (∇ = U + K1 + K2 + K2' + K2·K2'/(U + K1), plus the core of F.F0, see the NOTE)
         for Ch in (aCh, pCh, tCh)
             γ = get_reducible_vertex(F_mbe, Ch)
 
@@ -700,6 +951,8 @@ function asymptotic_to_mbe(F :: Vertex)
             for i in eachindex(Λ.data)
                 Ω, ν, ω = value.(to_meshes(Λ, i))
 
+                # MBE minus asymptotic form of the channels: the SBE products
+                # K2·K2'/(U + K1) of all three channels (D/M form for t)
                 ∇ = F_mbe(Ω, ν, ω, Ch, Sp; F0 = false) - F(Ω, ν, ω, Ch, Sp; F0 = false)
                 Λ[i] -= ∇
             end
@@ -710,10 +963,22 @@ function asymptotic_to_mbe(F :: Vertex)
 end
 
 
+"""
+    mbe_to_asymptotic(F_mbe::MBEVertex) -> Vertex
+    mbe_to_asymptotic(F_mbe::NL2_MBEVertex) -> NL2_Vertex
+
+Inverse of `asymptotic_to_mbe`: converts an MBE vertex back to the asymptotic
+representation by reabsorbing the SBE contribution into K3.
+
+NOTE: K3 is set to the single-channel MBE value minus `U + K1 + K2 + K2'`, which
+also contains the core of `F.F0`. So this inverts the K3 case of
+`asymptotic_to_mbe` only for a zero core, and never the core case.
+"""
 function mbe_to_asymptotic(F_mbe :: MBEVertex)
     F = Vertex(copy(F_mbe.F0), copy(F_mbe.γp), copy(F_mbe.γt), copy(F_mbe.γa))
 
     # Subtract SBE contribution from K3
+    # (K3 = single-channel MBE value - (U + K1 + K2 + K2'), i.e. M_r + K2·K2'/(U + K1))
     U = bare_vertex(F)
     for Ch in (aCh, pCh, tCh)
         γ = get_reducible_vertex(F, Ch)
@@ -733,14 +998,27 @@ end
 
 
 
-# -------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
+# Lattice MBE vertex (solver NL2)
+# -----------------------------------------------------------------------------
 
+"""
+    struct NL2_MBEVertex{Q, VT} <: AbstractMBEVertex{Q}
+
+Nonlocal (momentum-resolved) MBE vertex.  Holds a reference vertex `F0` and three
+`NL2_Channel{Q}` objects that store K1(Ω, P), K2(Ω, ν, P, k), and K3(Ω, ν, ν', P)
+on a Brillouin-zone mesh. The K3 slot holds the s-wave multi-boson rest `M_r`.
+
+Constructors: `NL2_MBEVertex(F0, γp, γt, γa)`, or
+`NL2_MBEVertex(F0, T, numK1, numK2, numK3, meshK)` with three zero channels.
+"""
 struct NL2_MBEVertex{Q, VT} <: AbstractMBEVertex{Q}
     F0 :: VT
     γp :: NL2_Channel{Q}
     γt :: NL2_Channel{Q}
     γa :: NL2_Channel{Q}
 
+    # from existing channels
     function NL2_MBEVertex(
         F0 :: VT,
         γp :: NL2_Channel{Q},
@@ -751,6 +1029,7 @@ struct NL2_MBEVertex{Q, VT} <: AbstractMBEVertex{Q}
         return new{Q, VT}(F0, γp, γt, γa)
     end
 
+    # three zero channels with the given boxes and momentum mesh
     function NL2_MBEVertex(
         F0    :: VT,
         T     :: Float64,
@@ -767,8 +1046,14 @@ struct NL2_MBEVertex{Q, VT} <: AbstractMBEVertex{Q}
     end
 end
 
+# An NL2_MBEVertex stores its channels as NL2_Channel objects (used by load_vertex).
 channel_type(::Type{NL2_MBEVertex}) = NL2_Channel
 
+"""
+    copy(F::NL2_MBEVertex) -> NL2_MBEVertex
+
+Independent copy, including a copy of `F0`.
+"""
 function Base.:copy(
     F :: NL2_MBEVertex{Q}
     ) :: NL2_MBEVertex{Q} where {Q}
@@ -776,6 +1061,11 @@ function Base.:copy(
     return NL2_MBEVertex(copy(F.F0), copy(F.γp), copy(F.γt), copy(F.γa))
 end
 
+"""
+    get_P_mesh(F::NL2_MBEVertex) -> KMesh
+
+Returns the Brillouin-zone momentum mesh used by the nonlocal channels of `F`.
+"""
 function get_P_mesh(
     F :: NL2_MBEVertex
     ) :: KMesh
@@ -783,6 +1073,11 @@ function get_P_mesh(
     return get_P_mesh(F.γp)
 end
 
+"""
+    numP(F::NL2_MBEVertex) -> Int64
+
+Returns the number of momentum points in the Brillouin-zone mesh of `F`.
+"""
 function numP(
     F :: NL2_MBEVertex
     ) :: Int64
@@ -791,6 +1086,17 @@ function numP(
 end
 
 
+"""
+    asymptotic_to_mbe(F::NL2_Vertex) -> NL2_MBEVertex
+
+Nonlocal counterpart of `asymptotic_to_mbe(::Vertex)`.  Converts a momentum-resolved
+vertex from the asymptotic representation to the MBE representation by removing the
+SBE contribution from K3 in each channel, leaving the multi-boson rest `M_r`.
+Fermionic momenta are s-wave projected (`kSW`) when evaluating K2 and K2'.
+Since K3 is s-wave, the subtracted SBE term is the average of
+`K2(k)·K2'(k′)/(U + K1)` over k and k′. Only the K3 case exists here; the NOTE
+of the local method applies.
+"""
 function asymptotic_to_mbe(F :: NL2_Vertex)
     F_mbe = NL2_MBEVertex(copy(F.F0), copy(F.γp), copy(F.γt), copy(F.γa))
 
@@ -813,6 +1119,14 @@ function asymptotic_to_mbe(F :: NL2_Vertex)
 end
 
 
+"""
+    mbe_to_asymptotic(F_mbe::NL2_MBEVertex) -> NL2_Vertex
+
+Nonlocal counterpart of `mbe_to_asymptotic(::MBEVertex)`.  Converts a momentum-resolved
+MBE vertex back to the asymptotic representation by reabsorbing the SBE contribution
+into K3: `K3 ← K123 - (U + K1 + K2 + K2')`, with `K123` the single-channel MBE value
+averaged over k and k′ (the NOTE of the local method applies).
+"""
 function mbe_to_asymptotic(F_mbe :: NL2_MBEVertex)
     F = NL2_Vertex(copy(F_mbe.F0), copy(F_mbe.γp), copy(F_mbe.γt), copy(F_mbe.γa))
 
@@ -836,6 +1150,24 @@ end
 
 
 
+# -----------------------------------------------------------------------------
+# Unused: spin-resolved view of an MBE vertex, and its class evaluators
+# -----------------------------------------------------------------------------
+
+"""
+    struct MBEVertexViewX2X{Q, VT, CT} <: AbstractVertex{Q}
+
+A fixed-momentum view of an MBE vertex (compare `VertexViewX2X`,
+`fixed_momentum_view.jl`) that keeps the pSp and xSp spin components of each
+channel in separate `ChannelViewX2X` fields, and the a channel split into its
+parts from the t and the a channel. Not used anywhere in the package: no
+function builds or evaluates it.
+Fields:
+- `γpp`/`γpx` : p-channel, pSp and xSp components
+- `γtp`/`γtx` : t-channel, pSp and xSp components
+- `γatp`/`γatx`: a-channel contribution from the t-channel (via crossing), pSp and xSp
+- `γaap`/`γaax`: a-channel contribution from the a-channel, pSp and xSp
+"""
 struct MBEVertexViewX2X{Q, VT, CT} <: AbstractVertex{Q}
     F0  :: VT
     γpp :: CT
@@ -863,6 +1195,7 @@ struct MBEVertexViewX2X{Q, VT, CT} <: AbstractVertex{Q}
     end
 end
 
+# Temperature and box sizes, from the p-channel view.
 function MatsubaraFunctions.temperature(F :: MBEVertexViewX2X) :: Float64
     return MatsubaraFunctions.temperature(F.γpp)
 end
@@ -872,6 +1205,17 @@ numK2(F :: MBEVertexViewX2X) :: NTuple{2, Int64} = numK2(F.γpp)
 numK3(F :: MBEVertexViewX2X) :: NTuple{2, Int64} = numK3(F.γpp)
 
 
+"""
+    (F::MBEVertex)(Ω, ν, ν', ::Type{Ch}, ::Type{Ch_k}, ::Type{Sp}, ::Type{Cl})
+
+Evaluates the `MBEVertex` at asymptotic class `Cl`, spin component `Sp`, and channel `Ch`,
+with a secondary channel tag `Ch_k` forwarded to the reference vertex `F.F0`:
+the class of `F.F0` plus `+γr` for pSp or `-γr` for xSp, with r = Ch. Not used
+anywhere in the package.
+
+NOTE: `-γr` is not in general the crossed spin component of channel r. Crossing
+maps t ↔ a, and in the p channel ν′ → Ω - ν′ (Lihm 2025, Eq. (S4a)).
+"""
 @inline function (F :: MBEVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -901,6 +1245,14 @@ end
 
 
 
+"""
+    (F::RefVertex)(Ω, ν, ν', ::Type{Ch}, ::Type{Ch_k}, ::Type{Sp}, ::Type{Cl})
+
+Returns the Λ-class contribution (the core, without U) of the reference vertex
+for all (Ch, Sp) channel–spin combinations, using crossing relations to relate the
+a-channel and xSp components to the p/t-channel data stored in `F`.
+Returns zero for all non-Λ asymptotic classes. Used only by the unused method above.
+"""
 @inline function (F :: RefVertex{Q})(
     Ω  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
     ν  :: Union{MatsubaraFrequency, InfiniteMatsubaraFrequency},
@@ -939,11 +1291,25 @@ end
 
 
 
-# There are multiple types of vertices to precompute.
-# (1) `cache_F0*`: Channel-U-irreducible vertexof the reference system (`S.F0`)
-#                  Cache ``Tᵣ = Γ - ∇ᵣ = Iᵣ - U + Mᵣ``.
-# (2) `cache_Γ*` : Irreducible finite-difference vertex (`S.F` with `F0=false`, `γ*=false`)
-# (3) `cache_F*` : Channel-U-irreducible vertexof the target system (`S.F`)
+# -----------------------------------------------------------------------------
+# K3 caches of the NL2 MBE solver
+# -----------------------------------------------------------------------------
+
+"""
+    build_K3_cache!(S::NL2_ParquetSolver{Q, <:NL2_MBEVertex})
+
+Nonlocal counterpart of `build_K3_cache!(::ParquetSolver)`.  Precomputes the vertex
+combinations needed to update K3 for a momentum-resolved MBE parquet solver.
+The same three cache classes are filled (see the local overload for details), but all
+quantities now carry an explicit bosonic momentum `P` and fermionic momenta are
+s-wave projected (`kSW`).
+
+`cache_Γ*` is written out as `F - F.F0`, each with channel r switched off. This
+is the same `Ĩ_r` as in the local version, where `F0 = false` does that
+subtraction inside the MBE evaluator. All caches are reduced across MPI ranks.
+The s-wave evaluation of an MBE vertex sums over k and k′ explicitly, so this
+is expensive.
+"""
 function build_K3_cache!(
     S :: NL2_ParquetSolver{Q, <: NL2_MBEVertex}
     ) where {Q}
@@ -970,6 +1336,7 @@ function build_K3_cache!(
         S.cache_Γpx[i] = S.F( Ω, ω, νp, P, kSW, kSW, pCh, xSp; γp=false) - S.F.F0( Ω, ω, νp, P, kSW, kSW, pCh, xSp; γp=false)
 
         # (Iᵣ - U) + Mᵣ
+        # (p channel in xSp: the bare part is -U, and M_p^×(Ω, ν̃, ν′) = -M_p^=(Ω, ν̃, Ω - ν′))
         S.cache_F0p[i] = S.F0(Ω, ω, νp, P, kSW, kSW, pCh, xSp; γp = false) + U + S.F0(Ω, ω, Ω - νp, P, kSW, kSW, pCh, K3Cl) * -1
         S.cache_F0a[i] = S.F0(Ω, ω, νp, P, kSW, kSW, aCh, pSp; γa = false) - U + S.F0(Ω, ω, νp, P, kSW, kSW, aCh, K3Cl)
         S.cache_F0t[i] = S.F0(Ω, ω, νp, P, kSW, kSW, tCh, pSp; γt = false) - U + S.F0(Ω, ω, νp, P, kSW, kSW, tCh, K3Cl)
