@@ -1,4 +1,22 @@
+# =============================================================================
+# Symmetry groups that keep only complete symmetry classes (switched off).
+#
+# A symmetry group (MatsubaraFunctions.SymmetryGroup) sorts the points of a mesh
+# function into classes of symmetry-related points and computes one value per
+# class. A symmetry can map a point inside the frequency box to a point outside
+# it. The idea here was to drop such incomplete classes and set their entries to
+# zero. The scheme is switched off: my_SymmetryGroup returns the plain symmetry
+# group and my_symmetrize! changes nothing. The solvers still build their
+# symmetry groups through my_SymmetryGroup, so the file is kept.
+# =============================================================================
 
+"""
+    class_inbounds(class, symmetries, f) -> Bool
+
+Return `true` if no symmetry in `symmetries` maps a point of `class` outside the
+mesh of `f`. Only used by the switched-off filter in
+[`my_SymmetryGroup`](@ref).
+"""
 function class_inbounds(
     class      :: Vector{Tuple{Int, Operation}},
     symmetries :: Vector{Symmetry{DD}},
@@ -20,6 +38,14 @@ function class_inbounds(
     return true
 end
 
+"""
+    my_SymmetryGroup(symmetries, f) -> SymmetryGroup
+
+Symmetry group of the mesh function `f` for the given `symmetries` (e.g. those
+in symmetries.jl). It was meant to drop every class with a point that a
+symmetry maps outside the box (see [`class_inbounds`](@ref)). That filter is
+switched off, so this is the plain `SymmetryGroup(symmetries, f)`.
+"""
 function my_SymmetryGroup(
     symmetries :: Vector{Symmetry{DD}},
     f          :: MeshFunction{DD}
@@ -29,12 +55,19 @@ function my_SymmetryGroup(
 
     SG = SymmetryGroup(symmetries, f)
 
-    # JML: We do not use the modified symmetrization scheme
+    # JML (Jae-Mo Lihm): We do not use the modified symmetrization scheme
 
     # filter!(class -> class_inbounds(class, symmetries, f), SG.classes)
     SG
 end
 
+"""
+    my_symmetrize!(f, SG) -> err
+
+Meant to symmetrize `f` with `SG` and set the entries outside `SG`'s classes to
+zero. The body is switched off, so `f` is not changed and the returned error
+is 0.
+"""
 function my_symmetrize!(
     f  :: MeshFunction{DD, Q},
     SG :: SymmetryGroup{DD, Q}
@@ -44,7 +77,7 @@ function my_symmetrize!(
 
     err = zero(real(Q))
 
-    # JML: We do not use the modified symmetrization scheme
+    # JML (Jae-Mo Lihm): We do not use the modified symmetrization scheme
 
     # # Store the representative value of f for each class
     # ref_list = [f[class[1][1]] for class in SG.classes]
