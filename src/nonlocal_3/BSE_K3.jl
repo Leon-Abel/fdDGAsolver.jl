@@ -1,3 +1,35 @@
+# =============================================================================
+# Bethe-Salpeter equation for the K3 class, solver NL3.
+#
+# In NL3 the K3 class keeps all momenta, so the internal sum runs over the
+# fermionic momentum k̃ as well. At each (q, k, k′) the mirrored Eq. (S29d)
+# reads
+#
+#   K̃3_r(Ω, ν, ν′; q, k, k′) = 1/β 1/N_k ∑_{ν̃,k̃} (F - F_01̄2)(Ω, ν, ν̃; q, k, k̃)
+#                                  [ Π̃_r (f - f_012) + Π_r Ĩ_r + Π_r FL ](Ω, ν̃, ν′; q, k̃, k′)
+#                              + FL(Ω, ν, ν′; q, k, k′)
+#
+# with the bubbles at (Ω, ν̃; q, k̃) (as in NL2) and the vertex slices from the
+# NL3 caches (nonlocal_3/build_K3_cache.jl). As in the local code, the central
+# part takes FL at the crossed point (Ω - ν̃, q - k̃) in the p channel. The sum
+# over ν̃ runs over the K3 box. See BSEa/BSEa_K3.jl for the names "1ℓ",
+# "right", "central" and "left" part, and for the signs.
+#
+# The K1 and K2 classes of NL3 use the NL2 kernels (nonlocal_2/BSEa/).
+#
+# Paper ↔ code: q ↔ P; k′ ↔ kp; ν̃, k̃ (summed) ↔ ω, q; ν′ ↔ νp; f, π ↔ F0,
+# Π0; cache names: Γ = Ĩ_r, F0 = f - f_012, F = F - F_01̄2.
+# =============================================================================
+
+"""
+    BSE_L_K3!(K3::NL3_MF_K3, cache_Γ, cache_F0, Π0::NL2_MF_Π, Π::NL2_MF_Π, SG, sign, ::Type{Ch}, ::Type{Sp}, is_mfRG = Val(false); mode = :serial) -> nothing
+
+NL3 version of [`BSE_L_K3!`](@ref): the K3 class of the left part,
+
+    FL(Ω, ν, ν′; q, k, k′) = 1/β 1/N_k ∑_{ν̃,k̃} Ĩ_r(Ω, ν, ν̃; q, k, k̃) π_r(Ω, ν̃; q, k̃) (f - f_012)(Ω, ν̃, ν′; q, k̃, k′)
+
+from the caches; the ν̃ sum runs over the K3 box.
+"""
 function BSE_L_K3!(
     K3       :: NL3_MF_K3{Q},
     cache_Γ  :: NL3_MF_K3{Q},
@@ -16,13 +48,13 @@ function BSE_L_K3!(
     T = temperature(meshes(K3, Val(1)))
     nK = length(meshes(K3, Val(4)))
 
-    # model the diagram
+    # FL(Ω, ν, ν′; q, k, k′) for one point: sum over ν̃ (called ω) and k̃ (called q)
     @inline function diagram(wtpl)
 
         Ω, ν, νp, P, k, kp = wtpl
         val     = zero(Q)
-        Γslice  = view(cache_Γ,  Ω, ν,  :, P, k,  :)
-        F0slice = view(cache_F0, Ω, :, νp, P, :, kp)
+        Γslice  = view(cache_Γ,  Ω, ν,  :, P, k,  :)     # Ĩ_r(Ω, ν, ν̃; q, k, k̃)
+        F0slice = view(cache_F0, Ω, :, νp, P, :, kp)     # (f - f_012)(Ω, ν̃, ν′; q, k̃, k′)
 
         for i in eachindex(Γslice)
             ω = value(meshes(cache_Γ, Val(3))[i.I[1]])
@@ -32,16 +64,26 @@ function BSE_L_K3!(
             val += Γslice[i] * Π0_val * F0slice[i]
         end
 
+        # 1/β 1/N_k ∑_{ν̃,k̃}, and the channel sign
         return T * val / nK * sign
     end
 
-    # compute K3
+    # evaluate one point per symmetry class; the symmetry group fills in the rest
     SG(K3, InitFunction{6, Q}(diagram); mode)
 
     return nothing
 end
 
 
+"""
+    BSE_K3!(K3::NL3_MF_K3, FL, cache_Γ, cache_F, cache_F0, Π0::NL2_MF_Π, Π::NL2_MF_Π, SG, sign1, sign2, ::Type{Ch}, ::Type{Sp}, is_mfRG = Val(false); mode = :serial) -> nothing
+
+NL3 version of [`BSE_K3!`](@ref): `K̃3_r(Ω, ν, ν′; q, k, k′)` from the mirrored
+Eq. (S29d) with the internal sum over ν̃ and k̃ (see the file header), written
+into `K3`. Arguments and signs as in the local method. With
+`is_mfRG = Val(true)` it computes the linearized form used by the
+preconditioner.
+"""
 function BSE_K3!(
     K3       :: NL3_MF_K3{Q},
     FL       :: AbstractVertex{Q},
@@ -63,22 +105,24 @@ function BSE_K3!(
     mK = meshes(K3, Val(4))
     nK = length(mK)
 
-    # model the diagram
+    # K̃3(Ω, ν, ν′; q, k, k′) for one point: sum over ν̃ (called ω) and k̃ (called q)
     @inline function diagram(wtpl)
 
         Ω, ν, νp, P, k, kp = wtpl
         val = zero(Q)
 
+        # Ĩ_r(Ω, ν̃, ν′; q, k̃, k′) for all ν̃, k̃
         if Ch === aCh || Ch === tCh
             Γslice  = view(cache_Γ, Ω, νp, :, P, kp, :)  # using symmetry Γ[Ω, ω, νp] = Γ[Ω, νp, ω]
         elseif Ch === pCh
             Γslice  = view(cache_Γ, Ω, :, νp, P, :, kp)
         end
 
+        # left part of this channel (FL = Ĩ π (f - f_012))
         γL = get_reducible_vertex(FL, Ch)
 
-        Fslice  = view(cache_F,  Ω, ν,  :, P, k,  :)
-        F0slice = view(cache_F0, Ω, :, νp, P, :, kp)
+        Fslice  = view(cache_F,  Ω, ν,  :, P, k,  :)     # (F - F_01̄2)(Ω, ν, ν̃; q, k, k̃)
+        F0slice = view(cache_F0, Ω, :, νp, P, :, kp)     # (f - f_012)(Ω, ν̃, ν′; q, k̃, k′)
 
         for i in eachindex(Fslice)
             ω = value(meshes(cache_F, Val(3))[i.I[1]])
@@ -87,12 +131,12 @@ function BSE_K3!(
             Π_val  = Π[ Ω, ω, P, q]
 
             if is_mfRG === Val(true)
-                # mfRG for the K3 class
+                # mfRG for the K3 class: reference bubble π only
 
                 # right part
                 val += Fslice[i] * Π0_val * Γslice[i] * sign1
 
-                # central part
+                # central part, with FL at the crossed point in the p channel
                 ω_ = _crossing(Ω, ω, Ch)
                 q_ = fold_back(_crossing(P, q, Ch), mK)
                 if is_inbounds(ω_, meshes(FL.γt.K3, Val(2)))
@@ -108,7 +152,7 @@ function BSE_K3!(
                 # 1ℓ and right part
                 val += Fslice[i] * ((Π_val - Π0_val) * F0slice[i] + Π_val * Γslice[i]) * sign1
 
-                # central part
+                # central part, with FL at the crossed point in the p channel
                 ω_ = _crossing(Ω, ω, Ch)
                 q_ = fold_back(_crossing(P, q, Ch), mK)
                 if is_inbounds(ω_, meshes(γL.K3, Val(2)))
@@ -121,6 +165,7 @@ function BSE_K3!(
             end
         end
 
+        # 1/β 1/N_k ∑, and the left part FL(Ω, ν, ν′; q, k, k′); density form in the t channel
         if Ch === aCh || Ch === pCh
             return temperature(FL) * val / nK + γL.K3[Ω, ν, νp, P, k, kp]
         else
@@ -129,7 +174,7 @@ function BSE_K3!(
 
     end
 
-    # compute K3
+    # evaluate one point per symmetry class; the symmetry group fills in the rest
     SG(K3, InitFunction{6, Q}(diagram); mode)
 
     return nothing
