@@ -1,30 +1,44 @@
-# fixed_momentum_view.jl
+# =============================================================================
+# Fixed-momentum views of lattice channels and vertices (NL and NL2).
 #
-# Implements momentum-fixed views of the reducible channels and full vertex.
-# A "fixed-momentum view" slices the momentum indices out of a non-local channel or vertex,
-# producing a lightweight callable that only requires Matsubara frequency arguments.
-# This avoids repeated momentum look-ups during the frequency summations in the BSE/parquet loops.
+# A view fixes the momenta (q, k, k′) of a lattice channel or vertex and keeps
+# only the frequency dependence. It is a light object that reads the stored
+# arrays at those momenta, so the frequency sums of a BSE need no momentum
+# look-ups. The NL2 BSE kernels used to evaluate their vertices this way (the
+# commented-out lines in nonlocal_2/BSEa/); now the views are used only in the
+# tests.
 #
-# CHANNEL EVALUATOR CONVENTION:
-# Both NL_Channel and NL2_Channel store K1, K2, K2p, K3 on grids that include momentum axes.
-# After slicing the momentum axes, the resulting ChannelViewX2X evaluates as
-#   γ(Ω, ν, ν') = K1[Ω] + K2[Ω, ν] + K2p[Ω, ν'] + K3[Ω, ν, ν']
-# where each term is included only if the corresponding frequency is in-bounds on its mesh.
-# Out-of-bounds frequencies are treated as the ν → ∞ limit (contribution = 0).
+# Channel view (ChannelViewX2X): with the momenta fixed, the reducible vertex
+# of one channel (Lihm 2025, Eq. (S7)) reads
 #
-# CROSSED CHANNEL CONVENTION:
-# VertexViewX2X stores six channel views: three "direct" (γpp, γtp, γap) and three "crossed"
-# (γpx, γtx, γax). The crossed views are pre-evaluated at the exchanged momentum so that the
-# xSp evaluator can apply crossing symmetry without an additional momentum conversion at call time.
+#   Φ_r(Ω, ν, ν′) = K1(Ω) + K2(Ω, ν) + K̄2(Ω, ν′) + K3(Ω, ν, ν′)
+#
+# where K̄2 is the K2 array read at the second fermionic momentum (field K2p).
+# A class whose frequency lies outside its box contributes zero.
+#
+# Vertex view (VertexViewX2X): the three channels at the momenta converted
+# from channel Ch (convention.jl), plus the same three channels at the momenta
+# of the crossed vertex. The second set gives the crossed spin component xSp
+# by crossing symmetry (Lihm 2025, Eq. (S4a)) without converting momenta at
+# every call.
+#
+# Paper ↔ code: q ↔ P; k′ ↔ kp (vertex) or q (channel); ν′ ↔ νp.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Types
+# -----------------------------------------------------------------------------
 
 
 """
     ChannelViewX2X{Q, T1, T2, T3} <: AbstractReducibleVertex{Q}
 
-A momentum-fixed view of a single reducible channel (NL_Channel or NL2_Channel).
+A momentum-fixed view of a single reducible channel (`NL_Channel` or `NL2_Channel`).
 
 Stores array views of K1, K2, K2p, and K3 with all momentum indices already sliced out,
 so only the Matsubara frequency axes remain. `Q` is the element type (e.g. ComplexF64).
+`K2p` is the class K̄2(Ω, ν′): a view of the same K2 array, at the second
+fermionic momentum.
 """
 struct ChannelViewX2X{Q, T1, T2, T3} <: AbstractReducibleVertex{Q}
     K1  :: T1   # view of K1 at fixed P:         K1[Ω]
@@ -49,20 +63,24 @@ end
 
 A momentum-fixed view of the full two-particle vertex F(Ω, ν, ν'; P, k, q, Ch, Sp).
 
-Stores a view of the fully irreducible part `F0` and six momentum-fixed channel views:
-- `γpp`, `γtp`, `γap`: parallel spin channel contributions in the p-, t-, and a-channels
-- `γpx`, `γtx`, `γax`: crossed spin channel contributions in the p-, t-, and a-channels
+Stores the vertex `F0` the channels are added to (a `RefVertex` in the PA, the
+reference f in fd runs; local vertices are used as they are) and six
+momentum-fixed channel views:
+- `γpp`, `γtp`, `γap`: `Φ_p`, `Φ_t`, `Φ_a` at the momenta of F, for the parallel
+  spin component pSp;
+- `γpx`, `γtx`, `γax`: the same channels at the momenta of the crossed vertex,
+  for the crossed spin component xSp.
 
 `Q` is the element type (e.g. ComplexF64).
 """
 struct VertexViewX2X{Q, VT, CT} <: AbstractVertex{Q}
-    F0  :: VT   # fully irreducible vertex (local or non-local view)
-    γpp :: CT   # p-channel reducible part, parallel spin
-    γtp :: CT   # t-channel reducible part, parallel spin
-    γap :: CT   # a-channel reducible part, parallel spin
-    γpx :: CT   # p-channel reducible part, crossed spin
-    γtx :: CT   # t-channel reducible part, crossed spin
-    γax :: CT   # a-channel reducible part, crossed spin
+    F0  :: VT   # vertex the channels are added to (local, or a view)
+    γpp :: CT   # p channel at the momenta of F
+    γtp :: CT   # t channel at the momenta of F
+    γap :: CT   # a channel at the momenta of F
+    γpx :: CT   # p channel at the momenta of the crossed vertex
+    γtx :: CT   # t channel at the momenta of the crossed vertex
+    γax :: CT   # a channel at the momenta of the crossed vertex
 
     function VertexViewX2X(
         F0  :: VT,
@@ -78,6 +96,7 @@ struct VertexViewX2X{Q, VT, CT} <: AbstractVertex{Q}
     end
 end
 
+# Temperature and box sizes, from the p-channel view.
 function MatsubaraFunctions.temperature(F :: VertexViewX2X) :: Float64
     return MatsubaraFunctions.temperature(F.γpp)
 end
@@ -86,6 +105,10 @@ numK1(F :: VertexViewX2X) :: Int64            = numK1(F.γpp)
 numK2(F :: VertexViewX2X) :: NTuple{2, Int64} = numK2(F.γpp)
 numK3(F :: VertexViewX2X) :: NTuple{2, Int64} = numK3(F.γpp)
 
+
+# -----------------------------------------------------------------------------
+# Building views
+# -----------------------------------------------------------------------------
 
 """
     fixed_momentum_view(γ::NL_Channel, P, k, q) -> ChannelViewX2X
@@ -117,9 +140,9 @@ end
 
 Returns a `ChannelViewX2X` of `γ` with all three momentum arguments `(P, k, q)` fixed.
 
-`NL2_Channel` stores K2 as a function of `(Ω, ν, P, k)` and K2p as a function of
-`(Ω, ν, P, q)`, so K2 is sliced at `(iP, ik)` and K2p at `(iP, iq)` independently.
-K3 depends only on `P` (not on the fermionic momenta).
+`NL2_Channel` stores one K2 array over `(Ω, ν, P, k)`. The view K2 is sliced
+from it at `(iP, ik)` and K2p (K̄2) at `(iP, iq)`, with `q` the second
+fermionic momentum k′. K3 depends only on `P` (not on the fermionic momenta).
 """
 @inline function fixed_momentum_view(
     γ :: NL2_Channel,
@@ -167,6 +190,10 @@ are computed from the exchanged external leg using the crossing relations:
 - pCh: crossing replaces `kp → P - kp`
 - tCh: crossing maps the momentum conventions from tCh to aCh (and vice versa)
 - aCh: crossing maps the momentum conventions from aCh to tCh (and vice versa)
+
+These are the momentum parts of the crossing relations used for xSp in
+nonlocal/vertex.jl. `F.F0` is turned into a view as well; a local `F0` is used
+as it is. There is no method for MBE vertices.
 """
 @inline function fixed_momentum_view(
     F  :: Union{NL_Vertex, NL2_Vertex},
@@ -189,6 +216,8 @@ are computed from the exchanged external leg using the crossing relations:
 
     # Crossed channel views: pre-compute momenta at the exchanged external leg so the xSp
     # evaluator can apply crossing without an additional momentum conversion at runtime.
+    # (In the t and a channels the same momenta are read in the other
+    # channel's parametrization, as in the xSp method of nonlocal/vertex.jl.)
     if Ch === pCh
         # pCh crossing: exchange the two outgoing legs, sending kp → P - kp
         γpx = fixed_momentum_view(F.γp, convert_momentum(P, k, P - kp, pCh, pCh)...)
@@ -209,6 +238,10 @@ are computed from the exchanged external leg using the crossing relations:
     VertexViewX2X(F0, γpp, γtp, γap, γpx, γtx, γax)
 end
 
+
+# -----------------------------------------------------------------------------
+# Evaluation
+# -----------------------------------------------------------------------------
 
 """
     (γ::ChannelViewX2X{Q})(Ω, ν, ν'; K1, K2, K3) -> Q
@@ -262,7 +295,7 @@ end
 """
     (F::VertexViewX2X{Q})(Ω, ν, ν', ::Type{Ch}, ::Type{pSp}; F0, γp, γt, γa) -> Q
 
-Evaluates the physical (particle) spin component of the momentum-fixed full vertex:
+Evaluates the parallel spin component F^= (pSp) of the momentum-fixed full vertex:
     F_pSp(Ω, ν, ν') = F0_pSp + γ_p + γ_t + γ_a
 
 Each channel contribution is routed through the appropriate frequency conversion from `Ch`
@@ -305,12 +338,15 @@ end
 """
     (F::VertexViewX2X{Q})(Ω, ν, ν', ::Type{Ch}, ::Type{xSp}; F0, γp, γt, γa) -> Q
 
-Evaluates the exchange spin component of the momentum-fixed full vertex using crossing symmetry.
-The crossing relation maps F_xSp to a sum over the channel views pre-stored with the exchanged
+Evaluates the crossed spin component F^× (xSp) of the momentum-fixed full vertex using
+crossing symmetry (Lihm 2025, Eq. (S4a)): F^× is minus F^= at the crossed point.
+The crossing relation maps `F_xSp` to a sum over the channel views pre-stored with the exchanged
 momentum (`γpx`, `γtx`, `γax`), with a global sign flip relative to the pSp evaluator:
     F_xSp = F0_xSp - [γ_px + γ_ax + γ_tx]
 The channel-to-channel crossing map (p↔p, t↔a) and the corresponding frequency conversions
-depend on the evaluation channel `Ch`.
+depend on the evaluation channel `Ch`. Because crossing exchanges t and a, the
+flag `γt` switches the a-channel term and `γa` the t-channel term, as in
+nonlocal/vertex.jl.
 """
 @inline function (F :: VertexViewX2X{Q})(
     Ω  :: MatsubaraFrequency,
@@ -333,7 +369,7 @@ depend on the evaluation channel `Ch`.
 
     # The crossed channel views (γpx, γtx, γax) already encode the exchanged momentum.
     # The frequency argument is converted from Ch into the crossed channel's convention.
-    # The sign is negative: xSp = pSp - 2*(exchange diagrams).
+    # The sign is negative: F^× = -F^= at the crossed point (crossing symmetry).
     if Ch === pCh
         γp && (val -= F.γpx(convert_frequency(Ω, ν, Ω - νp, pCh, pCh)...))
         γt && (val -= F.γax(convert_frequency(Ω, ν, Ω - νp, pCh, aCh)...))
