@@ -1,20 +1,36 @@
-# Precompute the vertex components that are used repeatedly in the BSE for the K3 vertex.
+# =============================================================================
+# Vertex caches for the K3 Bethe-Salpeter equation, solver NL2; and the caches
+# of the linearized BSE of the preconditioner, for both NL and NL2.
 #
-# The K3 channel BSE has the form ``C(Ω, ν, ν') = A(Ω, ν, ω) * Π(Ω, ω) * B(Ω, ω, ν')``.
-# Since the vertex `A(Ω, ν, ω)` does not depend on `ν'`, it can be computed outside the
-# loop over `ν'`. The same applies to the vertex `B(Ω, ω, ν')`.
-# Here, we compute all the necessary vertices that appears in the BSE for the K3 vertex.
+# K3 is s-wave in NL2, so the caches are those of the NL solver
+# (nonlocal/build_K3_cache.jl; see build_K3_cache.jl for the idea). Each term
+# of the K3 BSE has the form
 #
-# The `ω` component of the precomputed vertex should be computed on the frequency mesh of
-# the bubble, which is larger than that of the K3 vertex.
+#   C(Ω, ν, ν′; q) = 1/β ∑_ν̃ A(Ω, ν, ν̃; q) Π(Ω, ν̃; q) B(Ω, ν̃, ν′; q),
 #
-# We store only the decaying contributions of the vertices, i.e., we subtract the asymptotic
-# contributions, as they are accounted for in the BSE for the K1 and K2 vertices.
+# and A and B are stored on the K3 box at every bosonic momentum q, with the
+# vertices evaluated at the fermionic momenta (kSW, kSW), i.e. averaged over k
+# and k′ (Lihm 2025, Eq. (S17)). In NL2 this average includes the
+# k-dependent K2 classes (nonlocal_2/vertex.jl). Only the parts that decay at
+# large frequency are stored; the asymptotic parts are handled by the K1 and
+# K2 BSEs. The ν̃ sum is therefore cut at the K3 box.
 #
-# There are multiple types of vertices to precompute.
-# (1) `cache_F0*`: Full vertex of the reference system (`S.F0`)
-# (2) `cache_Γ*` : Irreducible finite-difference vertex (`S.F` with `F0=false`, `γ*=false`)
-# (3) `cache_F*` : Full vertex of the target system (`S.F`)
+# Caches (ν̃ = internal frequency, called ω in the code):
+#   B-type, (Ω, ν̃, ν′, q):  cache_F0r = f - f_012,  cache_Γpx = Ĩ_p (xSp)
+#   A-type, (Ω, ν, ν̃, q):   cache_Γr = Ĩ_r,  cache_Fr = F - F_01̄2
+#                            (linearized BSE: cache_Fr = f - f_01̄2)
+# For the p channel f is stored in the crossed spin component; the t-channel
+# caches hold the density combination dSp = 2·pSp - pSp(a).
+# =============================================================================
+
+"""
+    build_K3_cache!(S::NL2_ParquetSolver) -> nothing
+
+Fill the K3 caches of the NL2 solver from the current target vertex `S.F` and
+the reference vertex `S.F0`, at every bosonic momentum, with s-wave averaged
+vertices (see the file header). For an `NL2_MBEVertex` the method in
+`boson_exchange.jl` is used instead.
+"""
 function build_K3_cache!(
     S :: NL2_ParquetSolver{Q}
     ) where {Q}
@@ -30,12 +46,15 @@ function build_K3_cache!(
     set!(S.cache_Fa,  0)
     set!(S.cache_Ft,  0)
 
-    # Vertices multiplied by bubbles from the left
+    # B-type: vertices that stand to the right of the bubble, (Ω, ν̃, ν′, q)
 
     Threads.@threads for i in mpi_split(1 : length(S.cache_Γpx.data))
         Ω, ω, νp, P = value.(MatsubaraFunctions.to_meshes(S.cache_Γpx, i))
 
+        # Ĩ_p in the crossed spin component (p-channel BSE in the form of Eq. (S9a))
         S.cache_Γpx[i] = S.F( Ω, ω, νp, P, kSW, kSW, pCh, xSp; F0=false, γp=false)
+
+        # f - f_012 in each channel
 
         S.cache_F0p[i] = ( S.F0(Ω, ω,   νp, P, kSW, kSW, pCh, xSp)
                          - S.F0(Ω, ω, νInf, P, kSW, kSW, pCh, xSp) )
@@ -55,18 +74,17 @@ function build_K3_cache!(
     mpi_allreduce!(S.cache_F0t)
 
 
-    # Vertices multiplied by bubbles from the right
+    # A-type: vertices that stand to the left of the bubble, (Ω, ν, ν̃, q)
 
     Threads.@threads for i in mpi_split(1 : length(S.cache_Γpp.data))
         Ω, ν, ω, P = value.(MatsubaraFunctions.to_meshes(S.cache_Γpp, i))
 
-        # r-irreducible vertex in each channel r = p, a, t
+        # Ĩ_r in each channel r = p, a, t: no reference part, no own channel
         S.cache_Γpp[i] = S.F(Ω, ν, ω, P, kSW, kSW, pCh, pSp; F0=false, γp=false)
         S.cache_Γa[i]  = S.F(Ω, ν, ω, P, kSW, kSW, aCh, pSp; F0=false, γa=false)
         S.cache_Γt[i]  = S.F(Ω, ν, ω, P, kSW, kSW, tCh, pSp; F0=false, γt=false)
 
-        # Total vertex in each channel. We compute the reducible part and add the
-        # irreducible part computed above
+        # F - F_01̄2 in each channel: (F0 + Φ̃_r)(ν) - (F0 + Φ̃_r)(∞), plus Ĩ_r from above
         S.cache_Fp[i]  = ( S.F(Ω,    ν, ω, P, kSW, kSW, pCh, pSp; γa=false, γt=false)
                          - S.F(Ω, νInf, ω, P, kSW, kSW, pCh, pSp; γa=false, γt=false)
                          + S.cache_Γpp[i] )
@@ -94,6 +112,25 @@ function build_K3_cache!(
 end
 
 
+"""
+    build_K3_cache_mfRG!(S::Union{NL_ParquetSolver, NL2_ParquetSolver}, is_first_iteration) -> nothing
+
+Caches for the linearized BSE of the preconditioner (Lihm 2025, Eq. (S74c)),
+called by `mfRGLinearMap` (mfRG.jl) for the NL and NL2 solvers:
+
+- `cache_Γpx`, `cache_Γr`: `Ĩ_r` from the current target vertex, every call;
+- `cache_Fr`: the reference vertex `f - f_01̄2` (instead of `F - F_01̄2`), only
+  when `is_first_iteration = true`, because f does not change.
+
+The B-type caches `cache_F0r` are not needed by the linearized BSE and are left
+as they are. The caches are filled through the K3 symmetry groups (one point
+per symmetry class).
+
+`Ĩ_r` is computed as `F - f`, each with its own channel r switched off. This
+equals the `Ĩ_r` of [`build_K3_cache!`](@ref) when the reference f has no
+channels of its own. That holds in the usual setups: f is a `RefVertex`, or a
+lattice vertex that wraps the local DMFT vertex with zero channels.
+"""
 function build_K3_cache_mfRG!(
     S :: Union{NL_ParquetSolver{Q}, NL2_ParquetSolver{Q}},
     is_first_iteration :: Bool,
@@ -102,9 +139,9 @@ function build_K3_cache_mfRG!(
     # If `is_first_iteration = true`, compute F0 and Γ.
     # If `is_first_iteration = false`, compute Γ.
 
-    # The case (3) `cache_F*` is now computed with the reference vertex, not the target vertex.
+    # The `cache_F*` caches hold the reference vertex here, not the target vertex.
 
-    # Vertices multiplied by bubbles from the left
+    # B-type: Ĩ_p in the crossed spin component, as F - f with γp off
     @inline function diagram_Γpx(wtpl)
         Ω, ω, νp, P = wtpl
         return S.F(Ω, ω, νp, P, kSW, kSW, pCh, xSp; γp=false) - S.F.F0(Ω, ω, νp, P, kSW, kSW, pCh, xSp; γp=false)
@@ -112,7 +149,7 @@ function build_K3_cache_mfRG!(
     S.SGpp[3](S.cache_Γpx, InitFunction{4, Q}(diagram_Γpx); mode = S.mode)
 
 
-    # Vertices multiplied by bubbles from the right
+    # A-type: Ĩ_r in each channel, as F - f with γr off
     @inline function diagram_Γpp(wtpl)
         Ω, ν, ω, P = wtpl
         return S.F(Ω, ν, ω, P, kSW, kSW, pCh, pSp; γp=false) - S.F.F0(Ω, ν, ω, P, kSW, kSW, pCh, pSp; γp=false)
@@ -136,7 +173,8 @@ function build_K3_cache_mfRG!(
 
 
     if is_first_iteration
-        # Reference vertex. Needs to be cached only in the first mfRG iteration.
+        # Reference vertex f - f_01̄2. Needs to be cached only in the first mfRG
+        # iteration, because f does not change.
 
         @inline function diagram_F0p(wtpl)
             Ω, ν, ω, P = wtpl
