@@ -1,0 +1,695 @@
+Found 27 parameter sets in \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data
+
+====================================================================================================
+beta2.0_t-0.25_U0.5_mu0.25_numc1_numk256  (T = 0.5, U = 0.5, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 2.843868002963434e-17
+G     : 1.3877787807814457e-17
+Σ     : 0.0
+γp.K1 : 3.916793112126239e-6
+γt.K1 : 5.289547807511668e-7
+γa.K1 : 4.9746356979813215e-6
+γp.K2 : 0.00013697134626515397
+γt.K2 : 0.00010583298914085527
+γa.K2 : 0.0002372672996048968
+Fp_p  : 0.0007587995250314493
+Fp_x  : 0.0007587995250314493
+Ft_p  : 0.0007587995250314493
+Ft_x  : 0.0007927142658492343
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U0.5_mu0.25_numc1_numk256.h5
+
+Comparison with C:\Users\leona\fdDGAsolver.jl\data\high_temperature_U0.5.h5
+occ: new = 0.5000000106229887, ref = 0.49999999999995065
+params: new = (t3 = 0.0, U = 0.5, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+        ref = (t3 = 0.0, U = 0.5, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+
+G         max|ref| = 0.5741      max|new - ref| = 1.178e-5    relative = 2.05e-5   rms ref = 0.0574    rms new = 0.0574    rms diff = 1.06e-6
+G0        max|ref| = 0.5844      max|new - ref| = 9.355e-7    relative = 1.6e-6    rms ref = 0.0582    rms new = 0.0582    rms diff = 8.27e-8
+Σ         max|ref| = 0.03081     max|new - ref| = 0.0001633   relative = 0.0053    rms ref = 0.00319   rms new = 0.0032    rms diff = 4.63e-5
+K1p       max|ref| = 0.08571     max|new - ref| = 1.258e-5    relative = 0.000147  rms ref = 0.00538   rms new = 0.00539   rms diff = 8.38e-7
+K2p       size mismatch: new (127, 96), ref (147, 100)
+K1t       max|ref| = 0.02334     max|new - ref| = 9.565e-6    relative = 0.00041   rms ref = 0.00146   rms new = 0.00146   rms diff = 5.99e-7
+K2t       size mismatch: new (127, 96), ref (147, 100)
+K1a       max|ref| = 0.1324      max|new - ref| = 6.553e-6    relative = 4.95e-5   rms ref = 0.0083    rms new = 0.0083    rms diff = 5.04e-7
+K2a       size mismatch: new (127, 96), ref (147, 100)
+Fp_p      max|ref| = 0.002852    max|new - ref| = 0.003364    relative = 1.18      rms ref = 0.000565  rms new = 0.000283  rms diff = 0.000671
+Fp_x      max|ref| = 0.002883    max|new - ref| = 0.003483    relative = 1.21      rms ref = 0.00057   rms new = 0.000283  rms diff = 0.000676
+Ft_p      max|ref| = 0.002852    max|new - ref| = 0.003464    relative = 1.21      rms ref = 0.000665  rms new = 0.00032   rms diff = 0.000794
+Ft_x      max|ref| = 0.002883    max|new - ref| = 0.003483    relative = 1.21      rms ref = 0.00067   rms new = 0.000323  rms diff = 0.000801
+
+====================================================================================================
+beta2.0_t-0.25_U0.7_mu0.35_numc1_numk256  (T = 0.5, U = 0.7, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 1.9005756474901252e-17
+G     : 1.3877787807814457e-17
+Σ     : 0.0
+γp.K1 : 9.53293718389015e-6
+γt.K1 : 1.3808747384521562e-6
+γa.K1 : 6.77214727085283e-6
+γp.K2 : 0.00021771904706712253
+γt.K2 : 0.0002590598073606879
+γa.K2 : 0.00027878081225586875
+Fp_p  : 0.0010664297514936982
+Fp_x  : 0.0010664297503503578
+Ft_p  : 0.0012402637367673857
+Ft_x  : 0.0011031126341617195
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U0.7_mu0.35_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U0.8_mu0.4_numc1_numk256  (T = 0.5, U = 0.8, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 1.9033789680253444e-17
+G     : 1.0408340855860843e-17
+Σ     : 0.0
+γp.K1 : 8.36148913262032e-6
+γt.K1 : 3.473110465216102e-7
+γa.K1 : 8.815196878947105e-6
+γp.K2 : 0.0002816876033343657
+γt.K2 : 0.00033121725177156684
+γa.K2 : 0.00046721050846809924
+Fp_p  : 0.0018565207000786454
+Fp_x  : 0.001842398664667759
+Ft_p  : 0.0018565207000786454
+Ft_x  : 0.0019601411749857775
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U0.8_mu0.4_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U1.0_mu0.5_numc1_numk256  (T = 0.5, U = 1.0, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 2.4457172433878176e-18
+G     : 6.938893903907228e-18
+Σ     : 0.0
+γp.K1 : 2.0409012926111022e-5
+γt.K1 : 1.3788164388447324e-6
+γa.K1 : 1.7650102419114316e-5
+γp.K2 : 0.0004720078306986268
+γt.K2 : 0.0006766910395435802
+γa.K2 : 0.0005358105131527617
+Fp_p  : 0.0023991877717523665
+Fp_x  : 0.0023991877717523665
+Ft_p  : 0.0023991877717523665
+Ft_x  : 0.0023030971164006543
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U1.0_mu0.5_numc1_numk256.h5
+
+Comparison with C:\Users\leona\fdDGAsolver.jl\data\high_temperature_U1.0.h5
+occ: new = 0.5000000181003063, ref = 0.4999999999991949
+params: new = (t3 = 0.0, U = 1.0, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+        ref = (t3 = 0.0, U = 1.0, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+
+G         max|ref| = 0.5466      max|new - ref| = 1.046e-5    relative = 1.91e-5   rms ref = 0.0552    rms new = 0.0552    rms diff = 1.3e-6
+G0        max|ref| = 0.5866      max|new - ref| = 8.208e-7    relative = 1.4e-6    rms ref = 0.0584    rms new = 0.0584    rms diff = 7.26e-8
+Σ         max|ref| = 0.1247      max|new - ref| = 0.0006583   relative = 0.00528   rms ref = 0.0129    rms new = 0.0128    rms diff = 0.0004
+K1p       max|ref| = 0.2604      max|new - ref| = 5.247e-5    relative = 0.000202  rms ref = 0.0164    rms new = 0.0164    rms diff = 4.16e-6
+K2p       size mismatch: new (127, 96), ref (147, 100)
+K1t       max|ref| = 0.1814      max|new - ref| = 5.999e-5    relative = 0.000331  rms ref = 0.0114    rms new = 0.0114    rms diff = 3.76e-6
+K2t       size mismatch: new (127, 96), ref (147, 100)
+K1a       max|ref| = 0.6232      max|new - ref| = 6.751e-5    relative = 0.000108  rms ref = 0.0391    rms new = 0.0391    rms diff = 4.85e-6
+K2a       size mismatch: new (127, 96), ref (147, 100)
+Fp_p      max|ref| = 0.02321     max|new - ref| = 0.009973    relative = 0.43      rms ref = 0.000918  rms new = 0.000655  rms diff = 0.00118
+Fp_x      max|ref| = 0.02241     max|new - ref| = 0.009714    relative = 0.433     rms ref = 0.000922  rms new = 0.000641  rms diff = 0.00113
+Ft_p      max|ref| = 0.02321     max|new - ref| = 0.01018     relative = 0.438     rms ref = 0.00114   rms new = 0.000733  rms diff = 0.00143
+Ft_x      max|ref| = 0.02241     max|new - ref| = 0.009714    relative = 0.433     rms ref = 0.00115   rms new = 0.00072   rms diff = 0.00138
+
+====================================================================================================
+beta2.0_t-0.25_U1.1_mu0.55_numc1_numk256  (T = 0.5, U = 1.1, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 4.891668986607567e-18
+G     : 6.938893903907228e-18
+Σ     : 0.0
+γp.K1 : 1.8675369976558443e-5
+γt.K1 : 4.07178300902921e-6
+γa.K1 : 1.970657470667299e-5
+γp.K2 : 0.000529070601302678
+γt.K2 : 0.0005926129461595768
+γa.K2 : 0.0008547880223616257
+Fp_p  : 0.0028573258109669403
+Fp_x  : 0.0028573258109669407
+Ft_p  : 0.0028573258109669403
+Ft_x  : 0.0022585796924672196
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U1.1_mu0.55_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U1.2_mu0.6_numc1_numk256  (T = 0.5, U = 1.2, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 3.836484519163004e-17
+G     : 1.0408340855860843e-17
+Σ     : 0.0
+γp.K1 : 1.4020889702006053e-5
+γt.K1 : 1.8961858946243213e-6
+γa.K1 : 1.4987427347163106e-5
+γp.K2 : 0.0006186812067176889
+γt.K2 : 0.000722971885910184
+γa.K2 : 0.0008686408430634096
+Fp_p  : 0.0022780278850704594
+Fp_x  : 0.002286408969085663
+Ft_p  : 0.0022780278850704594
+Ft_x  : 0.0025503565389956503
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U1.2_mu0.6_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U1.3_mu0.65_numc1_numk256  (T = 0.5, U = 1.3, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 3.8451970129355985e-17
+G     : 6.938893903907228e-18
+Σ     : 0.0
+γp.K1 : 8.863377845365954e-5
+γt.K1 : 2.6580038734380835e-6
+γa.K1 : 9.394481645308356e-5
+γp.K2 : 0.0006050563208834808
+γt.K2 : 0.0013867044067914353
+γa.K2 : 0.0008983031669661046
+Fp_p  : 0.004153397316496995
+Fp_x  : 0.004153397309736351
+Ft_p  : 0.004153397316496995
+Ft_x  : 0.004153397309736351
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U1.3_mu0.65_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U1.4_mu0.7_numc1_numk256  (T = 0.5, U = 1.4, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 3.8547597798140944e-17
+G     : 6.938893903907228e-18
+Σ     : 0.0
+γp.K1 : 3.273905999027214e-5
+γt.K1 : 1.6235380118698483e-6
+γa.K1 : 3.1507227106665507e-5
+γp.K2 : 0.0006940545278631898
+γt.K2 : 0.0009056185475891321
+γa.K2 : 0.0012030458665979401
+Fp_p  : 0.0032847802463922444
+Fp_x  : 0.003587423286703918
+Ft_p  : 0.0032847802463922444
+Ft_x  : 0.0034954660698023232
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U1.4_mu0.7_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U1.5_mu0.75_numc1_numk256  (T = 0.5, U = 1.5, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 3.8647874303167427e-17
+G     : 6.938893903907228e-18
+Σ     : 0.0
+γp.K1 : 4.0622826708366455e-5
+γt.K1 : 3.21590532833192e-7
+γa.K1 : 4.031882972106087e-5
+γp.K2 : 0.000919539279993992
+γt.K2 : 0.001363378937496963
+γa.K2 : 0.001251924321350094
+Fp_p  : 0.004618329939194458
+Fp_x  : 0.004618329939194458
+Ft_p  : 0.004618329939194458
+Ft_x  : 0.0046653726115971125
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U1.5_mu0.75_numc1_numk256.h5
+
+Comparison with C:\Users\leona\fdDGAsolver.jl\data\high_temperature_U1.5.h5
+occ: new = 0.5000000031663839, ref = 0.49999999952384755
+params: new = (t3 = 0.0, U = 1.5, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+        ref = (t3 = 0.0, U = 1.5, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+
+G         max|ref| = 0.505       max|new - ref| = 5.312e-5    relative = 0.000105  rms ref = 0.0519    rms new = 0.0519    rms diff = 5.05e-6
+G0        max|ref| = 0.59        max|new - ref| = 4.379e-6    relative = 7.42e-6   rms ref = 0.0587    rms new = 0.0587    rms diff = 3.88e-7
+Σ         max|ref| = 0.2854      max|new - ref| = 0.0007982   relative = 0.0028    rms ref = 0.0293    rms new = 0.0293    rms diff = 0.000459
+K1p       max|ref| = 0.4281      max|new - ref| = 8.338e-5    relative = 0.000195  rms ref = 0.027     rms new = 0.027     rms diff = 6.23e-6
+K2p       size mismatch: new (127, 96), ref (147, 100)
+K1t       max|ref| = 0.584       max|new - ref| = 6.121e-5    relative = 0.000105  rms ref = 0.0366    rms new = 0.0366    rms diff = 3.84e-6
+K2t       size mismatch: new (127, 96), ref (147, 100)
+K1a       max|ref| = 1.596       max|new - ref| = 3.887e-5    relative = 2.44e-5   rms ref = 0.1       rms new = 0.1       rms diff = 4.44e-6
+K2a       size mismatch: new (127, 96), ref (147, 100)
+Fp_p      max|ref| = 0.1552      max|new - ref| = 0.03023     relative = 0.195     rms ref = 0.00474   rms new = 0.00218   rms diff = 0.0048
+Fp_x      max|ref| = 0.1563      max|new - ref| = 0.02952     relative = 0.189     rms ref = 0.00476   rms new = 0.00218   rms diff = 0.00477
+Ft_p      max|ref| = 0.1552      max|new - ref| = 0.04695     relative = 0.302     rms ref = 0.00786   rms new = 0.00237   rms diff = 0.008
+Ft_x      max|ref| = 0.1563      max|new - ref| = 0.04685     relative = 0.3       rms ref = 0.00787   rms new = 0.00235   rms diff = 0.00792
+
+====================================================================================================
+beta2.0_t-0.25_U1.6_mu0.8_numc1_numk256  (T = 0.5, U = 1.6, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 1.7855414604217275e-18
+G     : 1.0408340855860843e-17
+Σ     : 0.0
+γp.K1 : 0.00012539945552975207
+γt.K1 : 9.002997791764529e-7
+γa.K1 : 0.000123599516236258
+γp.K2 : 0.0009577945192193944
+γt.K2 : 0.0010829159765515135
+γa.K2 : 0.0015609217281322611
+Fp_p  : 0.005700472289607551
+Fp_x  : 0.0055908419888931644
+Ft_p  : 0.005700472289607551
+Ft_x  : 0.004896655388756315
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U1.6_mu0.8_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U2.04_mu1.02_numc1_numk256  (T = 0.5, U = 2.04, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 3.571258291014795e-18
+G     : 6.938893903907228e-18
+Σ     : 0.0
+γp.K1 : 6.717539015051894e-5
+γt.K1 : 1.3437322533458914e-5
+γa.K1 : 6.676739572753855e-5
+γp.K2 : 0.0015643058283377816
+γt.K2 : 0.0029371946342697376
+γa.K2 : 0.002687542273517067
+Fp_p  : 0.00851887940832173
+Fp_x  : 0.008849297480160419
+Ft_p  : 0.00851887940832173
+Ft_x  : 0.009115075276502491
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U2.04_mu1.02_numc1_numk256.h5
+
+Comparison with C:\Users\leona\fdDGAsolver.jl\data\high_temperature_U2.04.h5
+occ: new = 0.5000000124391517, ref = 0.4999999995152008
+params: new = (t3 = 0.0, U = 2.04, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+        ref = (t3 = 0.0, U = 2.04, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+
+G         max|ref| = 0.45        max|new - ref| = 0.000288    relative = 0.00064   rms ref = 0.0477    rms new = 0.0476    rms diff = 2.55e-5
+G0        max|ref| = 0.5946      max|new - ref| = 2.441e-5    relative = 4.11e-5   rms ref = 0.0591    rms new = 0.0591    rms diff = 2.16e-6
+Σ         max|ref| = 0.5402      max|new - ref| = 0.001492    relative = 0.00276   rms ref = 0.0552    rms new = 0.0553    rms diff = 0.000233
+K1p       max|ref| = 0.5412      max|new - ref| = 0.0002995   relative = 0.000553  rms ref = 0.0342    rms new = 0.0342    rms diff = 2.11e-5
+K2p       size mismatch: new (127, 96), ref (147, 100)
+K1t       max|ref| = 1.371       max|new - ref| = 0.0001366   relative = 9.96e-5   rms ref = 0.0859    rms new = 0.0858    rms diff = 8.58e-6
+K2t       size mismatch: new (127, 96), ref (147, 100)
+K1a       max|ref| = 3.283       max|new - ref| = 4.559e-5    relative = 1.39e-5   rms ref = 0.206     rms new = 0.206     rms diff = 9.96e-6
+K2a       size mismatch: new (127, 96), ref (147, 100)
+Fp_p      max|ref| = 0.6605      max|new - ref| = 0.05382     relative = 0.0815    rms ref = 0.00903   rms new = 0.00704   rms diff = 0.00717
+Fp_x      max|ref| = 0.6599      max|new - ref| = 0.05382     relative = 0.0816    rms ref = 0.00902   rms new = 0.00704   rms diff = 0.00717
+Ft_p      max|ref| = 0.6605      max|new - ref| = 0.05382     relative = 0.0815    rms ref = 0.0108    rms new = 0.00716   rms diff = 0.00935
+Ft_x      max|ref| = 0.6599      max|new - ref| = 0.05382     relative = 0.0816    rms ref = 0.0108    rms new = 0.00716   rms diff = 0.00936
+
+====================================================================================================
+beta2.0_t-0.25_U2.089_mu1.0445_numc1_numk256  (T = 0.5, U = 2.089, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 3.571280539883814e-18
+G     : 1.0408340855860843e-17
+Σ     : 0.0
+γp.K1 : 0.00013459355297006992
+γt.K1 : 2.5996179731241025e-6
+γa.K1 : 0.0001338377951528176
+γp.K2 : 0.0019099299930029295
+γt.K2 : 0.0022331832814508103
+γa.K2 : 0.0029427263561941255
+Fp_p  : 0.008795691215958893
+Fp_x  : 0.008795691215958891
+Ft_p  : 0.008795691215958893
+Ft_x  : 0.010147768692643045
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U2.089_mu1.0445_numc1_numk256.h5
+
+Comparison with C:\Users\leona\fdDGAsolver.jl\data\high_temperature_U2.089.h5
+occ: new = 0.49999997271267854, ref = 0.4999999997590976
+params: new = (t3 = 0.0, U = 2.089, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+        ref = (t3 = 0.0, U = 2.089, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+
+G         max|ref| = 0.4448      max|new - ref| = 0.0001542   relative = 0.000347  rms ref = 0.0473    rms new = 0.0473    rms diff = 1.37e-5
+G0        max|ref| = 0.595       max|new - ref| = 1.31e-5     relative = 2.2e-5    rms ref = 0.0591    rms new = 0.0591    rms diff = 1.16e-6
+Σ         max|ref| = 0.5678      max|new - ref| = 0.001381    relative = 0.00243   rms ref = 0.0579    rms new = 0.0578    rms diff = 0.00105
+K1p       max|ref| = 0.5471      max|new - ref| = 0.0008596   relative = 0.00157   rms ref = 0.0345    rms new = 0.0346    rms diff = 5.63e-5
+K2p       size mismatch: new (127, 96), ref (147, 100)
+K1t       max|ref| = 1.462       max|new - ref| = 0.0002172   relative = 0.000149  rms ref = 0.0915    rms new = 0.0915    rms diff = 1.36e-5
+K2t       size mismatch: new (127, 96), ref (147, 100)
+K1a       max|ref| = 3.471       max|new - ref| = 0.000426    relative = 0.000123  rms ref = 0.217     rms new = 0.217     rms diff = 3.19e-5
+K2a       size mismatch: new (127, 96), ref (147, 100)
+Fp_p      max|ref| = 0.7359      max|new - ref| = 0.05319     relative = 0.0723    rms ref = 0.0107    rms new = 0.00739   rms diff = 0.00854
+Fp_x      max|ref| = 0.7364      max|new - ref| = 0.05437     relative = 0.0738    rms ref = 0.0107    rms new = 0.00739   rms diff = 0.00848
+Ft_p      max|ref| = 0.7359      max|new - ref| = 0.121       relative = 0.164     rms ref = 0.0148    rms new = 0.0075    rms diff = 0.0135
+Ft_x      max|ref| = 0.7364      max|new - ref| = 0.1225      relative = 0.166     rms ref = 0.0148    rms new = 0.0075    rms diff = 0.0134
+
+====================================================================================================
+beta2.0_t-0.25_U2.1_mu1.05_numc1_numk256  (T = 0.5, U = 2.1, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 7.424915038555144e-19
+G     : 5.204170427930421e-18
+Σ     : 0.0
+γp.K1 : 0.00010912350139094727
+γt.K1 : 9.068608728873957e-6
+γa.K1 : 0.00010756650872604975
+γp.K2 : 0.0016501259644249881
+γt.K2 : 0.0034563773313484435
+γa.K2 : 0.002599395421221207
+Fp_p  : 0.007081179750719157
+Fp_x  : 0.007081179751601508
+Ft_p  : 0.010138456934779244
+Ft_x  : 0.010138456948300614
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U2.1_mu1.05_numc1_numk256.h5
+
+Comparison with C:\Users\leona\fdDGAsolver.jl\data\high_temperature_U2.1.h5
+occ: new = 0.499999959176585, ref = 0.5000000000059671
+params: new = (t3 = 0.0, U = 2.1, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+        ref = (t3 = 0.0, U = 2.1, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+
+G         max|ref| = 0.4436      max|new - ref| = 0.0001211   relative = 0.000273  rms ref = 0.0472    rms new = 0.0472    rms diff = 1.08e-5
+G0        max|ref| = 0.5951      max|new - ref| = 1.03e-5     relative = 1.73e-5   rms ref = 0.0591    rms new = 0.0591    rms diff = 9.1e-7
+Σ         max|ref| = 0.5742      max|new - ref| = 0.001547    relative = 0.00269   rms ref = 0.0586    rms new = 0.0585    rms diff = 0.000697
+K1p       max|ref| = 0.5484      max|new - ref| = 9.56e-5     relative = 0.000174  rms ref = 0.0346    rms new = 0.0346    rms diff = 1.82e-5
+K2p       size mismatch: new (127, 96), ref (147, 100)
+K1t       max|ref| = 1.483       max|new - ref| = 0.0001167   relative = 7.87e-5   rms ref = 0.0928    rms new = 0.0928    rms diff = 7.34e-6
+K2t       size mismatch: new (127, 96), ref (147, 100)
+K1a       max|ref| = 3.514       max|new - ref| = 0.0001392   relative = 3.96e-5   rms ref = 0.22      rms new = 0.22      rms diff = 1.89e-5
+K2a       size mismatch: new (127, 96), ref (147, 100)
+Fp_p      max|ref| = 0.7562      max|new - ref| = 0.03769     relative = 0.0498    rms ref = 0.00948   rms new = 0.00744   rms diff = 0.00652
+Fp_x      max|ref| = 0.7558      max|new - ref| = 0.03654     relative = 0.0483    rms ref = 0.00948   rms new = 0.00745   rms diff = 0.00657
+Ft_p      max|ref| = 0.7562      max|new - ref| = 0.05084     relative = 0.0672    rms ref = 0.0107    rms new = 0.00755   rms diff = 0.0082
+Ft_x      max|ref| = 0.7558      max|new - ref| = 0.05231     relative = 0.0692    rms ref = 0.0107    rms new = 0.00757   rms diff = 0.00829
+
+====================================================================================================
+beta2.0_t-0.25_U2.2_mu1.1_numc1_numk256  (T = 0.5, U = 2.2, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 7.889562036538044e-17
+G     : 5.204170427930421e-18
+Σ     : 0.0
+γp.K1 : 9.184150378842563e-5
+γt.K1 : 1.4099736262969966e-5
+γa.K1 : 0.00011509733231684594
+γp.K2 : 0.0017374907396330325
+γt.K2 : 0.0029083005082527124
+γa.K2 : 0.0033761706412279656
+Fp_p  : 0.008194967005425652
+Fp_x  : 0.008194967003756186
+Ft_p  : 0.008194967005425652
+Ft_x  : 0.008264269653071284
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U2.2_mu1.1_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U2.3_mu1.15_numc1_numk256  (T = 0.5, U = 2.3, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 3.57138177252406e-18
+G     : 1.0408340855860843e-17
+Σ     : 0.0
+γp.K1 : 0.00021970623341155317
+γt.K1 : 5.759652152398392e-6
+γa.K1 : 0.00020822166034450702
+γp.K2 : 0.0017808158362637861
+γt.K2 : 0.002998834390851425
+γa.K2 : 0.004078794633608058
+Fp_p  : 0.01032772159649471
+Fp_x  : 0.010327721560583617
+Ft_p  : 0.01032772159649471
+Ft_x  : 0.010327721560583617
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U2.3_mu1.15_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U2.4_mu1.2_numc1_numk256  (T = 0.5, U = 2.4, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 9.792996281175411e-18
+G     : 5.204170427930421e-18
+Σ     : 0.0
+γp.K1 : 0.00018954584536315649
+γt.K1 : 9.934148403248224e-6
+γa.K1 : 0.00019227741311652943
+γp.K2 : 0.0017883822750576382
+γt.K2 : 0.002978100966550717
+γa.K2 : 0.004284441506615934
+Fp_p  : 0.011452781449186482
+Fp_x  : 0.011452781449186482
+Ft_p  : 0.011452781449186482
+Ft_x  : 0.010633256272397104
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U2.4_mu1.2_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U2.5_mu1.25_numc1_numk256  (T = 0.5, U = 2.5, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 7.963602297097165e-17
+G     : 3.469446951953614e-18
+Σ     : 0.0
+γp.K1 : 8.541209505556725e-5
+γt.K1 : 1.3241874072069571e-5
+γa.K1 : 8.48754327316341e-5
+γp.K2 : 0.0022880015855969707
+γt.K2 : 0.0031048630230452036
+γa.K2 : 0.005182729265609489
+Fp_p  : 0.011166404819420293
+Fp_x  : 0.013730601026916816
+Ft_p  : 0.011166404819420293
+Ft_x  : 0.013283364319659915
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U2.5_mu1.25_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U2.6_mu1.3_numc1_numk256  (T = 0.5, U = 2.6, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 9.795033771001023e-18
+G     : 6.938893903907228e-18
+Σ     : 0.0
+γp.K1 : 0.00022418306520569884
+γt.K1 : 4.513003357021613e-6
+γa.K1 : 0.0002180269208758432
+γp.K2 : 0.0020425881041901987
+γt.K2 : 0.0037090467026163637
+γa.K2 : 0.0036507568165365825
+Fp_p  : 0.011798848328735376
+Fp_x  : 0.011002942673778217
+Ft_p  : 0.011798848328735376
+Ft_x  : 0.012083492583157199
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U2.6_mu1.3_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U2.7_mu1.35_numc1_numk256  (T = 0.5, U = 2.7, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 8.013149717926511e-17
+G     : 3.469446951953614e-18
+Σ     : 0.0
+γp.K1 : 0.00011915493734649608
+γt.K1 : 1.785903965256905e-5
+γa.K1 : 9.763443528967583e-5
+γp.K2 : 0.0024685366605326233
+γt.K2 : 0.003363468987034923
+γa.K2 : 0.006670533020398475
+Fp_p  : 0.015229260786026107
+Fp_x  : 0.01659907834351555
+Ft_p  : 0.015229260786026107
+Ft_x  : 0.015844863880435413
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U2.7_mu1.35_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U2.8_mu1.4_numc1_numk256  (T = 0.5, U = 2.8, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 8.038299629379127e-17
+G     : 5.204170427930421e-18
+Σ     : 0.0
+γp.K1 : 0.0003457634916056106
+γt.K1 : 3.077076734418065e-5
+γa.K1 : 0.0003574406238107109
+γp.K2 : 0.002366870009602228
+γt.K2 : 0.004329871623291843
+γa.K2 : 0.004900332270038065
+Fp_p  : 0.014931184335400725
+Fp_x  : 0.014931184307888052
+Ft_p  : 0.014931184335400725
+Ft_x  : 0.014931184307888052
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U2.8_mu1.4_numc1_numk256.h5
+
+Comparison with C:\Users\leona\fdDGAsolver.jl\data\high_temperature_U2.8.h5
+occ: new = 0.5000000123061538, ref = 0.49999999947888957
+params: new = (t3 = 0.0, U = 2.8, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+        ref = (t3 = 0.0, U = 2.8, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+
+G         max|ref| = 0.3681      max|new - ref| = 2.435e-5    relative = 6.61e-5   rms ref = 0.0415    rms new = 0.0415    rms diff = 2.99e-6
+G0        max|ref| = 0.6017      max|new - ref| = 2.303e-7    relative = 3.83e-7   rms ref = 0.0596    rms new = 0.0596    rms diff = 2.29e-8
+Σ         max|ref| = 1.054       max|new - ref| = 0.001616    relative = 0.00153   rms ref = 0.107     rms new = 0.107     rms diff = 0.000385
+K1p       max|ref| = 0.5607      max|new - ref| = 0.000166    relative = 0.000296  rms ref = 0.0355    rms new = 0.0355    rms diff = 2.64e-5
+K2p       size mismatch: new (127, 96), ref (147, 100)
+K1t       max|ref| = 3.139       max|new - ref| = 1.183e-5    relative = 3.77e-6   rms ref = 0.197     rms new = 0.197     rms diff = 1.6e-6
+K2t       size mismatch: new (127, 96), ref (147, 100)
+K1a       max|ref| = 6.838       max|new - ref| = 0.0001683   relative = 2.46e-5   rms ref = 0.428     rms new = 0.428     rms diff = 2.67e-5
+K2a       size mismatch: new (127, 96), ref (147, 100)
+Fp_p      max|ref| = 2.735       max|new - ref| = 0.1406      relative = 0.0514    rms ref = 0.0326    rms new = 0.0269    rms diff = 0.0196
+Fp_x      max|ref| = 2.747       max|new - ref| = 0.1436      relative = 0.0523    rms ref = 0.0326    rms new = 0.0269    rms diff = 0.0195
+Ft_p      max|ref| = 2.735       max|new - ref| = 0.1406      relative = 0.0514    rms ref = 0.035     rms new = 0.0269    rms diff = 0.0237
+Ft_x      max|ref| = 2.747       max|new - ref| = 0.1436      relative = 0.0523    rms ref = 0.0351    rms new = 0.0269    rms diff = 0.0236
+
+====================================================================================================
+beta2.0_t-0.25_U2.9_mu1.45_numc1_numk256  (T = 0.5, U = 2.9, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 8.062758865987643e-17
+G     : 5.204170427930421e-18
+Σ     : 0.0
+γp.K1 : 0.0006178212410884329
+γt.K1 : 8.617835368381174e-6
+γa.K1 : 0.0006005872720800142
+γp.K2 : 0.003094260118401257
+γt.K2 : 0.003962790274593804
+γa.K2 : 0.004524209449280368
+Fp_p  : 0.012669519606218736
+Fp_x  : 0.012669519648744363
+Ft_p  : 0.012669519606218736
+Ft_x  : 0.012675712538651232
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U2.9_mu1.45_numc1_numk256.h5
+
+Comparison with C:\Users\leona\fdDGAsolver.jl\data\high_temperature_U2.9.h5
+occ: new = 0.4999999165004041, ref = 0.4999999996280027
+params: new = (t3 = 0.0, U = 2.9, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+        ref = (t3 = 0.0, U = 2.9, μ = 0.0, T = 0.5, t2 = 0.0, t1 = -0.25)
+
+G         max|ref| = 0.3577      max|new - ref| = 7.898e-5    relative = 0.000221  rms ref = 0.0407    rms new = 0.0407    rms diff = 7.14e-6
+G0        max|ref| = 0.6026      max|new - ref| = 6.989e-6    relative = 1.16e-5   rms ref = 0.0597    rms new = 0.0597    rms diff = 6.18e-7
+Σ         max|ref| = 1.136       max|new - ref| = 0.001186    relative = 0.00104   rms ref = 0.115     rms new = 0.115     rms diff = 0.000884
+K1p       max|ref| = 0.5535      max|new - ref| = 0.0004491   relative = 0.000811  rms ref = 0.0351    rms new = 0.035     rms diff = 5.3e-5
+K2p       size mismatch: new (127, 96), ref (147, 100)
+K1t       max|ref| = 3.427       max|new - ref| = 0.0003817   relative = 0.000111  rms ref = 0.215     rms new = 0.215     rms diff = 2.4e-5
+K2t       size mismatch: new (127, 96), ref (147, 100)
+K1a       max|ref| = 7.407       max|new - ref| = 0.00121     relative = 0.000163  rms ref = 0.464     rms new = 0.464     rms diff = 8.87e-5
+K2a       size mismatch: new (127, 96), ref (147, 100)
+Fp_p      max|ref| = 3.182       max|new - ref| = 0.09935     relative = 0.0312    rms ref = 0.0351    rms new = 0.0315    rms diff = 0.0161
+Fp_x      max|ref| = 3.195       max|new - ref| = 0.09828     relative = 0.0308    rms ref = 0.0352    rms new = 0.0315    rms diff = 0.0162
+Ft_p      max|ref| = 3.182       max|new - ref| = 0.174       relative = 0.0547    rms ref = 0.0378    rms new = 0.0316    rms diff = 0.021
+Ft_x      max|ref| = 3.195       max|new - ref| = 0.1763      relative = 0.0552    rms ref = 0.0379    rms new = 0.0316    rms diff = 0.0212
+
+====================================================================================================
+beta2.0_t-0.25_U3.0_mu1.5_numc1_numk256  (T = 0.5, U = 3.0, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 1.6174307906903e-16
+G     : 5.204170427930421e-18
+Σ     : 0.0
+γp.K1 : 0.00029439278828724975
+γt.K1 : 1.909420090037963e-5
+γa.K1 : 0.0003325826957501401
+γp.K2 : 0.0034737066939823824
+γt.K2 : 0.0071924395979977495
+γa.K2 : 0.005753857450871827
+Fp_p  : 0.01632762458508588
+Fp_x  : 0.0163276245305235
+Ft_p  : 0.01632762458508588
+Ft_x  : 0.0163276245305235
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U3.0_mu1.5_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U3.1_mu1.55_numc1_numk256  (T = 0.5, U = 3.1, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 8.111373090171929e-17
+G     : 5.204170427930421e-18
+Σ     : 0.0
+γp.K1 : 0.001699347750547645
+γt.K1 : 1.7479377684897937e-5
+γa.K1 : 0.001734298609459732
+γp.K2 : 0.004475508185974542
+γt.K2 : 0.007107774846510234
+γa.K2 : 0.006503750048164317
+Fp_p  : 0.01849897539099502
+Fp_x  : 0.01951520029373687
+Ft_p  : 0.01849897539099502
+Ft_x  : 0.019042259379521073
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U3.1_mu1.55_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U3.2_mu1.6_numc1_numk256  (T = 0.5, U = 3.2, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 8.135182707788573e-17
+G     : 3.469446951953614e-18
+Σ     : 0.0
+γp.K1 : 0.00031140482869304993
+γt.K1 : 5.936011853393381e-6
+γa.K1 : 0.0002995239862246115
+γp.K2 : 0.003169523859079608
+γt.K2 : 0.008354651935237847
+γa.K2 : 0.006994677641245673
+Fp_p  : 0.018810472531947297
+Fp_x  : 0.020790166249010672
+Ft_p  : 0.02283531961446137
+Ft_x  : 0.022835319646427092
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U3.2_mu1.6_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U3.3_mu1.65_numc1_numk256  (T = 0.5, U = 3.3, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 1.6316945579016642e-16
+G     : 3.469446951953614e-18
+Σ     : 0.0
+γp.K1 : 0.0003234392282027503
+γt.K1 : 9.816890741043596e-6
+γa.K1 : 0.0003343562161795511
+γp.K2 : 0.0051121621955954
+γt.K2 : 0.01150410194093857
+γa.K2 : 0.007819997186491156
+Fp_p  : 0.023513066180084613
+Fp_x  : 0.023607212444454368
+Ft_p  : 0.023513066180084613
+Ft_x  : 0.023513066180084613
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U3.3_mu1.65_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U3.4_mu1.7_numc1_numk256  (T = 0.5, U = 3.4, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 8.181741381361887e-17
+G     : 2.6020852139652106e-18
+Σ     : 0.0
+γp.K1 : 0.0006005902931594957
+γt.K1 : 1.4800246738535128e-5
+γa.K1 : 0.0006028269260700791
+γp.K2 : 0.003994690642204995
+γt.K2 : 0.0070229155169306634
+γa.K2 : 0.008690652550652978
+Fp_p  : 0.024628028705583258
+Fp_x  : 0.02396137280046822
+Ft_p  : 0.024628028705583258
+Ft_x  : 0.023156190605026033
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U3.4_mu1.7_numc1_numk256.h5
+
+====================================================================================================
+beta2.0_t-0.25_U3.5_mu1.75_numc1_numk256  (T = 0.5, U = 3.5, params = (μ = 0.0, t1 = -0.25, t2 = 0.0, t3 = 0.0))
+====================================================================================================
+Half-filling violation
+G0    : 8.204604942670787e-17
+G     : 4.336808689942018e-18
+Σ     : 0.0
+γp.K1 : 0.0007208618625469236
+γt.K1 : 1.1121174784735138e-5
+γa.K1 : 0.0007299153598063497
+γp.K2 : 0.0038983963144442356
+γt.K2 : 0.007241140159779121
+γa.K2 : 0.00849840784546646
+Fp_p  : 0.023874470488083655
+Fp_x  : 0.02458561204122811
+Ft_p  : 0.023874470488083655
+Ft_x  : 0.026812997539413318
+Imposing half-filling...
+Saved \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed\beta2.0_t-0.25_U3.5_mu1.75_numc1_numk256.h5
+
+Parsed 27 of 27 parameter sets into \\wsl.localhost\Ubuntu\home\leon\projects\triqs_work\data_parsed
