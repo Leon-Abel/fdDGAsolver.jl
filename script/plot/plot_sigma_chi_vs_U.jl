@@ -83,17 +83,17 @@ include(joinpath(@__DIR__, "..", "postprocess", "precompute_sigma_chi.jl"))   # 
 # Running the file as a script overrides them from the command line - and these
 # are the defaults `--help` reports, so the two entry points cannot drift apart.
 # ---------------------------------------------------------------------------
-nls        = "1,2,3"          # comma-separated NL methods to draw: 1 | 2 | 3
+nls        = "1"          # comma-separated NL methods to draw: 1 | 2 | 3
 strategies = "fdPA"           # comma-separated scPA | fdPA (empty for a DMFT-only figure)
-schemes    = "mfRG,anderson"  # comma-separated anderson | mfRG
-qx         = 0.5              # q_x in units of π
+schemes    = "mfRG"  # comma-separated anderson | mfRG
+qx         = 0.0              # q_x in units of π
 qy         = 0.5              # q_y in units of π
 Umin       = -Inf             # lower U-axis window bound
 Umax       = Inf              # upper U-axis window bound
 resmax     = 0.0001           # largest admitted residual norm
-nmax       = 12               # half-box size for the vertex grids
-nq         = 6                # linear k-grid size for the vertex mesh
-tilde      = false            # plot X̃ = X − X_DMFT (the difference to DMFT) instead of ...
+nmax       = 10               # half-box size for the vertex grids
+nq         = 4                # linear k-grid size for the vertex mesh
+tilde      = true            # plot X̃ = X − X_DMFT (the difference to DMFT) instead of ...
 no_dmft    = false            # omit the DMFT reference curve
 
 # ---------------------------------------------------------------------------
@@ -588,7 +588,7 @@ function plot_data(d)
             tellwidth    = false,
         )
 
-        figdir = figures_dir()
+        figdir = figures_dir("sigma_chi_vs_U")
         mkpath(figdir)
         qtag  = "q$(replace(string(qx_pi), "." => "p"))_$(replace(string(qy_pi), "." => "p"))"
         stag  = join(vcat([ALGO_FAMILY[s] for s in strats_sel],

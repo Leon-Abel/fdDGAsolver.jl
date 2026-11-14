@@ -65,7 +65,7 @@ include(joinpath(@__DIR__, "..", "postprocess", "precompute_sigma_chi.jl"))   # 
 # Running the file as a script overrides them from the command line — and these
 # are the defaults `--help` reports, so the two entry points cannot drift apart.
 # ---------------------------------------------------------------------------
-U          = "0.5"              # as spelled in the DMFT file name
+U          = "3.0"              # as spelled in the DMFT file name
 nmax       = 10                 # vertex box half-size
 nq         = 4                  # coarse k-grid size
 nls        = "1"                # NL methods to draw: "1" | "1,2" | "1,2,3"
@@ -389,14 +389,15 @@ function plot_data(d; qx_pi = qx_pi, qy_pi = qy_pi, wmax = wmax)
             tellwidth    = false,
         )
 
-        figdir = figures_dir()
+        figdir = figures_dir("sigma_chi_vs_freq")
         mkpath(figdir)
         stag  = join((ALGO_FAMILY[st] for st in strats_sel), "-")   # e.g. "fd-sc"
         nltag = "NL" * join(nls_sel, "")   # e.g. "NL12"
         ktag  = "q$(qx_pi)_$(qy_pi)"       # e.g. "q1.0_1.0"
         out   = joinpath(figdir,
             "hubbard_vsfreq_U$(U)_T$(T)_nmax$(nmax)_nq$(nq)_$(nltag)_$(stag)_$(ktag)_$(mode).svg")
-        save(out, fig)
+        # Name the backend explicitly: GLMakie, if active in this session, cannot write SVG.
+        save(out, fig; backend = CairoMakie)
         println("Saved figure to\n  $out")
 
         return fig

@@ -511,13 +511,13 @@ function plot_data(d; tol = tol)
             nbanks        = nbanks,
         )
 
-        figdir = figures_dir()
+        figdir = figures_dir("residual_vs_size")
         mkpath(figdir)
         ztag = join(["$(s[1])-$(s[2])" for s in sizes], "_")
         utag = join([replace(u, "." => "p") for u in Us], "-")
         out  = joinpath(figdir,
             "residual_vs_size_NL$(NL_method)_$(join(algos, "-"))_$(ztag)_U$(utag).svg")
-        save(out, fig)
+        save(out, fig; backend = CairoMakie)
         println("Saved figure to\n  $out")
 
         display(fig)

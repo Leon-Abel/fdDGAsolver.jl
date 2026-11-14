@@ -118,8 +118,8 @@ function load_data(; sc_file = sc_file, fd_file = fd_file, HA_file = HA_file)
              χ = [0.37984341637010666, 0.24745907473309592,
                   0.1796697508896795, 0.11264056939501776, 0.08048398576512461])
 
-    # The figure is written next to the pDΓA input.
-    outfile = replace(filename_fd, ".h5" => ".svg")
+    # The figure takes the pDΓA input's name.
+    outfile = joinpath(figures_dir("susceptibilities"), replace(basename(filename_fd), ".h5" => ".svg"))
 
     return (; sc, fd, HA, NRG_D, NRG_M, outfile)
 end
@@ -251,7 +251,8 @@ function plot_data(d)
         # Save
         # -----------------------------------------------------------------------
         println("Saving figure")
-        save(d.outfile, fig)
+        mkpath(dirname(d.outfile))
+        save(d.outfile, fig; backend = CairoMakie)
         println("Figure written to $(d.outfile)")
 
         return fig

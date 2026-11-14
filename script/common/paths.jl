@@ -13,7 +13,8 @@ repo_path(parts...) =normpath(joinpath(REPO_ROOT, parts...))
 
 data_dir()    = repo_path("data")
 output_dir()  = repo_path("output")
-figures_dir() = repo_path("figures")
+# Each plotting script writes to its own subfolder, e.g. `figures_dir("sigma_chi_vs_U")`.
+figures_dir(parts...) = repo_path("figures", parts...)
 
 # -----------------------------------------------------------------------------
 # Run settings

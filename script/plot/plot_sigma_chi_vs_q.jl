@@ -59,10 +59,10 @@ include(joinpath(@__DIR__, "..", "postprocess", "precompute_sigma_chi.jl"))   # 
 # Running the file as a script overrides them from the command line - and these
 # are the defaults `--help` reports, so the two entry points cannot drift apart.
 # ---------------------------------------------------------------------------
-U          = "1.0"            # interaction strength, as spelled in the DMFT file name
+U          = "3.0"            # interaction strength, as spelled in the DMFT file name
 nls        = "1"              # comma-separated NL methods to draw: 1 | 2 | 3
 strategies = "fdPA"           # comma-separated scPA | fdPA
-schemes    = "mfRG,anderson"  # comma-separated anderson | mfRG
+schemes    = "mfRG"           # comma-separated anderson | mfRG
 nmax       = 10               # half-box size for the vertex grids
 nq         = 4                # linear k-grid size for the vertex mesh
 tilde      = false            # plot X̃ = X − X_DMFT (the difference to DMFT) instead of ...
@@ -450,7 +450,7 @@ function plot_data(d)
             tellwidth    = false,
         )
 
-        figdir = figures_dir()
+        figdir = figures_dir("sigma_chi_vs_q")
         mkpath(figdir)
         stag  = join((ALGO_FAMILY[s] for s in strats_sel), "-")   # e.g. "fd-sc"
         itag  = join(schemes_sel, "-")                            # e.g. "anderson-mfRG"
