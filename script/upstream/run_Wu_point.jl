@@ -124,7 +124,7 @@ end
 # filename_dmft_partial = "Wu_point.h5"
 
 # # High temperature half filling points
-# filename_dmft_partial = "high_temperature_U2.089.h5"
+# filename_dmft_partial = "dmft_U2.089_T0.5.h5"
 
 # # Weak coupling points (from Eckhardt et al PRB (2020))
 # filename_dmft_partial = "weak_coupling_U2.0.h5"

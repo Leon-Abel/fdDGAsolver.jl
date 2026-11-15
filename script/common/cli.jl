@@ -125,13 +125,15 @@ end
 """
     add_dmft_arg!(s; default)
 
-The DMFT input file: a path relative to the repo root, or just a U value as
-shorthand for `data/high_temperature_U<U>.h5`.
+The DMFT input file: a path relative to the repo root, `U<U>_T<T>` as shorthand
+for `data/dmft_U<U>_T<T>.h5`, or just a U value when there is one input at that U
+(see `parse_dmft_inputs`).
 """
 function add_dmft_arg!(s; default)
     add_arg_table!(s,
         ["--dmft"], Dict(:help    => "DMFT reference: a path relative to the repo root, " *
-                                     "or just the U (shorthand for data/high_temperature_U<U>.h5)",
+                                     "U<U>_T<T> (shorthand for data/dmft_U<U>_T<T>.h5), " *
+                                     "or just the U if there is one input at that U",
                          :arg_type => String, 
                          :default => default))  # no check here; see `resolve_dmft`
     return s
@@ -224,16 +226,20 @@ end
 """
     parse_dmft_inputs(s) -> Vector{String}
 
-Comma-separated DMFT inputs, as paths relative to the repo root. A plain
-number U is shorthand for `data/high_temperature_U<U>.h5`.
+Comma-separated DMFT inputs, as paths relative to the repo root. Two shorthands
+name a file in `data/`: `U<U>_T<T>` stands for `data/dmft_U<U>_T<T>.h5`, and a
+plain number U for the one DMFT input at that U (an error if there are inputs at
+several temperatures, see `dmft_T`).
 """
 function parse_dmft_inputs(s)
     out = String[]
     for part in split(s, ',')
         item = String(strip(part))
         isempty(item) && continue
-        push!(out, occursin('/', item) || occursin('\\', item) || endswith(item, ".h5") ?
-                   item : "data/high_temperature_U$(item).h5")
+        m = match(r"^U([0-9]*\.?[0-9]+)_T([0-9]*\.?[0-9]+)$", item)
+        push!(out, occursin('/', item) || occursin('\\', item) || endswith(item, ".h5") ? item :
+                   m !== nothing ? "data/" * dmft_basename(m.captures[1], m.captures[2]) :
+                                   "data/" * dmft_basename(item, dmft_T(item)))
     end
     isempty(out) && error("Expected at least one DMFT input, got `$s`.")
     return out
@@ -324,7 +330,7 @@ end
 # -----------------------------------------------------------------------------
 # Starting runs from a batch script
 # -----------------------------------------------------------------------------
-# A batch script (e.g. run_all_high_temperature.jl) does no calculation itself:
+# A batch script (e.g. run_all_dmft.jl) does no calculation itself:
 # it starts a single-run script (e.g. run_hubbard_model.jl) once for each set
 # of settings, each in its own Julia process.
 

@@ -32,9 +32,10 @@ Usage (from the repo root):
 Run with `--help` for the full option list and the current defaults. Every option
 is named, so order never matters and only what you change needs to be passed.
 
-  --U            interaction, as spelled in the DMFT file name. T is fixed by U
-                 through that reference. The detQMC benchmark overlays only at
-                 U = 2.089.
+  --U            interaction, as spelled in the DMFT file name. The detQMC
+                 benchmark overlays only at U = 2.089.
+  --T            temperature, as spelled in the DMFT file name; needed only when
+                 there are DMFT inputs at several T for this U
   --nmax --nq    vertex box half-size and coarse k-grid size
   --nls          comma-separated NL methods to draw: 1 | 2 | 3
   --strategies   comma-separated scPA | fdPA
@@ -60,7 +61,8 @@ include(joinpath(@__DIR__, "..", "postprocess", "precompute_sigma_chi.jl"))   # 
 # are the defaults `--help` reports, so the two entry points cannot drift apart.
 # ---------------------------------------------------------------------------
 U          = "3.0"            # interaction strength, as spelled in the DMFT file name
-nls        = "1"              # comma-separated NL methods to draw: 1 | 2 | 3
+T          = ""               # temperature, as spelled in the DMFT file name ("": the one T at U)
+nls      = "1"              # comma-separated NL methods to draw: 1 | 2 | 3
 strategies = "fdPA"           # comma-separated scPA | fdPA
 schemes    = "mfRG"           # comma-separated anderson | mfRG
 nmax       = 10               # half-box size for the vertex grids
@@ -76,6 +78,9 @@ if abspath(PROGRAM_FILE) == @__FILE__
     add_arg_table!(settings,
         ["--U"],  Dict(:help => "interaction strength, as spelled in the DMFT file name",
                        :arg_type => String, :default => U),
+        ["--T"],  Dict(:help => "temperature, as spelled in the DMFT file name " *
+                                "(default: the one T with an input at U)",
+                       :arg_type => String, :default => T),
         ["--nls"], Dict(:help => "comma-separated NL methods to draw: 1 | 2 | 3",
                        :arg_type => String, :default => nls),
         ["--strategies"], Dict(:help => "comma-separated scPA | fdPA",
@@ -91,6 +96,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     parsed = parse_args(ARGS, settings)
 
     U          = parsed["U"]
+    T          = parsed["T"]
     nls        = parsed["nls"]
     strategies = parsed["strategies"]
     schemes    = parsed["schemes"]
@@ -143,7 +149,7 @@ end
 path_arclength(kx, ky) = [0.0; cumsum(hypot.(diff(kx), diff(ky)))]
 
 """
-    load_data(; U, nls, strategies, schemes, nmax, nq, tilde) -> NamedTuple
+    load_data(; U, T, nls, strategies, schemes, nmax, nq, tilde) -> NamedTuple
 
 Read the caches (generating any that are missing), the DMFT reference and the
 detQMC benchmark, and assemble every curve the figure draws. Each keyword defaults
@@ -151,6 +157,7 @@ to the parameter block above, so `load_data()` loads exactly what executing this
 file would.
 """
 function load_data(; U          = U,
+                     T          = T,
                      nls        = nls,
                      strategies = strategies,
                      schemes    = schemes,
@@ -170,12 +177,13 @@ function load_data(; U          = U,
     # `U_num` is the same value for the arithmetic (axis labels, χ ~ 1/U²).
     U_num = parse(Float64, U)
 
-    # T is fixed by U via the DMFT reference; used so the cache filenames match.
-    T = dmft_temperature(U)
+    # T as spelled in the file names (the one T at U when left empty), and its value.
+    T_str = isempty(string(T)) ? dmft_T(U) : string(T)
+    T     = dmft_temperature(U, T_str)
 
     # The unit the U and T axes are quoted in, read off the same reference rather
     # than written here as a bare factor of 4.
-    t = dmft_hopping(U)
+    t = dmft_hopping(U, T_str)
 
     multi_scheme = length(schemes_sel) > 1
     multi_nl     = length(nls_sel)     > 1
@@ -205,7 +213,7 @@ function load_data(; U          = U,
     # -----------------------------------------------------------------------
     # `dmft_reference` takes U as spelled: the string picks the file, the number it
     # parses out of it divides into χ.
-    dref = (!tilde || U_num == 2.089) ? dmft_reference(U) : nothing
+    dref = (!tilde || U_num == 2.089) ? dmft_reference(U; T = T_str) : nothing
 
     # Keyed by the same field symbols `panel!` uses.
     dmft_val = dref === nothing ? Dict{Symbol, Float64}() : Dict(
@@ -271,7 +279,7 @@ function load_data(; U          = U,
     # a run that was never performed simply drops out of the figure.
     function load_curve(strategy, iteration_scheme, NL_method)
         label = "$(ALGO_FAMILY[strategy])_$(iteration_scheme)/NL$(NL_method)"
-        file  = postprocess_path(U, T, nmax, nq, NL_method, strategy, iteration_scheme)
+        file  = postprocess_path(U, T_str, nmax, nq, NL_method, strategy, iteration_scheme)
 
         if isfile(file)
             println("Reusing cached $(label) data:\n  $file")
@@ -279,13 +287,13 @@ function load_data(; U          = U,
             # Check the solver file first: `precompute` reads the (large) DMFT payload
             # before it ever looks for the solver, so an unperformed run would cost that
             # load only to fail. This keeps "select everything, plot what exists" cheap.
-            solver = solver_path(U, T, nmax, nq, NL_method, strategy, iteration_scheme)
+            solver = solver_path(U, T_str, nmax, nq, NL_method, strategy, iteration_scheme)
             if !isfile(solver)
                 @warn "No cache and no saved solver for $(label); skipping it.\n  $solver"
                 return nothing
             end
             try
-                precompute(U, nmax, nq, NL_method, strategy, iteration_scheme)
+                precompute(U, nmax, nq, NL_method, strategy, iteration_scheme; T = T_str)
             catch err
                 @warn "Could not obtain $(label) data; skipping it." exception = err
                 return nothing

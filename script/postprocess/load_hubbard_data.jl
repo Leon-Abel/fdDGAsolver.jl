@@ -27,7 +27,7 @@ Run with `--help` for the full option list.
   --scheme         : anderson or mfRG. Names the file only: both converge the same
                      fixed point, so the loaded object is structurally identical.
   --dmft           : (fdPA only) path to the DMFT reference data, relative to the
-                     repo root. Defaults to data/high_temperature_U<U>.h5.
+                     repo root. Defaults to data/dmft_U<U>_T<T>.h5.
 
 The solver file is expected at
   output/hubbard_model/hubbard_<algo>_U<U>_T<T>_nmax<nmax>_nq<nq>_NL<NL_method>.h5
@@ -71,7 +71,7 @@ file is read, since both schemes converge the same fixed point of the same solve
 For `:fdPA` the reference vertex shell is rebuilt from the DMFT data. Callers that
 already hold that payload (`precompute_sigma_chi.jl`) pass it as `data_triqs` so the
 file is not read a second time; otherwise it is loaded from `dmft_path`
-(defaulting to the `data/high_temperature_U<U>.h5` that `dmft_file(U)` names).
+(defaulting to the `data/dmft_U<U>_T<T>.h5` that `dmft_file(U, T)` names).
 
 The shell itself comes from `build_solver` (common/runs.jl) — the same function
 `run_hubbard_model.jl` built the saved run with. That matters because a shell
@@ -103,7 +103,7 @@ function load_hubbard_solver(U, T, nmax, nq, NL_method, strategy, iteration_sche
         # structure must be rebuilt from the same DMFT data before loading —
         # reusing the caller's copy when there is one.
         if data_triqs === nothing
-            dfile = dmft_path === nothing ? dmft_file(U) : repo_path(dmft_path)
+            dfile = dmft_path === nothing ? dmft_file(U, T) : repo_path(dmft_path)
             isfile(dfile) || error("DMFT reference data not found:\n  $dfile")
             data_triqs = load_triqs_data(dfile)
         end
@@ -161,7 +161,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     add_run_args!(settings; strategy, iteration_scheme)
     add_arg_table!(settings,
         ["--dmft"], Dict(:help => "(fdPA only) DMFT reference path relative to the repo root; " *
-                                  "defaults to data/high_temperature_U<U>.h5",
+                                  "defaults to data/dmft_U<U>_T<T>.h5",
                          :arg_type => String, :default => dmft))
 
     parsed = parse_args(ARGS, settings)

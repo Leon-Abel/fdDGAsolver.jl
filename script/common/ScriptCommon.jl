@@ -32,7 +32,8 @@ export strategy_label, arg_symbol, check_run, check_NL
 export run_basename, solver_dir, solver_path, RUN_FILE_RE, parse_run_basename
 export anderson_depth_dir, anderson_depth_basename, anderson_depth_path, anderson_depth_re
 export postprocess_dir, postprocess_path
-export dmft_file, DMFT_FILE_RE, scan_dmft_U
+export dmft_basename, dmft_file, DMFT_FILE_RE, parse_dmft_basename
+export scan_dmft, scan_dmft_U, dmft_T
 export figures_dir, CHI_SCAN_METHODS, chi_scan_basename, chi_scan_path
 
 # --- cli.jl ------------------------------------------------------------------

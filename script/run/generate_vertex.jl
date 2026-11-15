@@ -11,8 +11,9 @@ Usage (from the repo root, multi-threaded — `mode = :threads` needs the thread
 Run with `--help` for the full option list and the current defaults. Like every
 other script here the options are named, so order never matters:
 
-  --dmft           DMFT reference: a path relative to the repo root, or just the U
-                   (shorthand for data/high_temperature_U<U>.h5)
+  --dmft           DMFT reference: a path relative to the repo root, U<U>_T<T>
+                   (shorthand for data/dmft_U<U>_T<T>.h5), or just the U if there
+                   is one input at that U
   --tol --maxiter  solver stopping criteria
 
   julia --project=script -t 8 script/run/generate_vertex.jl --dmft=2.089

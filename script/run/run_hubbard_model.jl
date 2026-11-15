@@ -24,9 +24,10 @@ are named, so order never matters and only what you set needs to be passed:
   julia --project=script -t 8 script/run/run_hubbard_model.jl --nmax=12 --nq=6
   julia --project=script -t 8 script/run/run_hubbard_model.jl --strategy=scPA --scheme=anderson
   julia --project=script -t 8 script/run/run_hubbard_model.jl --dmft=2.06 --NL=2
+  julia --project=script -t 8 script/run/run_hubbard_model.jl --dmft=U5.0_T0.25
 
-`--dmft` takes a path relative to the repo root, or just the U as shorthand for
-`data/high_temperature_U<U>.h5`.
+`--dmft` takes a path relative to the repo root, `U<U>_T<T>` as shorthand for
+`data/dmft_U<U>_T<T>.h5`, or just the U when there is one input at that U.
 
 Output — one HDF5 file under `output/hubbard_model/`:
   hubbard_<algo>_U<U>_T<T>_nmax<nmax>_nq<nq>_NL<NL_method>.h5
@@ -56,14 +57,14 @@ using .ScriptCommon
 # Running the file as a script overrides them from the command line - and these
 # are the defaults `--help` reports, so the two entry points cannot drift apart.
 # ---------------------------------------------------------------------------
-nmax             = 10       # half-box size for the vertex grids
-nq               = 4        # linear k-grid size for the vertex mesh
-NL_method        = 1        # vertex momentum structure: 1 (K2(k,q)≈K2(q) ...
-strategy         = :fdPA    # reference vertex F0: scPA (bare, parquet approximation) or ...
-iteration_scheme = :mfRG    # how the fixed point is reached: anderson or mfRG
-dmft             = "2.089"  # DMFT reference: a path relative to the repo root, or just ...
-tol              = 1.0e-8   # residual-norm convergence tolerance
-maxiter          = 200      # maximum parquet iterations
+nmax             = 10        # half-box size for the vertex grids
+nq               = 4         # linear k-grid size for the vertex mesh
+NL_method        = 1         # vertex momentum structure: 1 (K2(k,q)≈K2(q) ...
+strategy         = :fdPA     # reference vertex F0: scPA (bare, parquet approximation) or ...
+iteration_scheme = :anderson # how the fixed point is reached: anderson or mfRG
+dmft             = "2.04"    # DMFT reference: a path relative to the repo root, or just ...
+tol              = 1.0e-8    # residual-norm convergence tolerance
+maxiter          = 200       # maximum parquet iterations
 
 # ---------------------------------------------------------------------------
 # CLI driver (skipped when this file is executed in the REPL or `include`d)
@@ -118,6 +119,14 @@ using .ScriptRuns
 
 data_triqs = load_triqs_data(dmft_path)
 (; T, U, μ, t1) = data_triqs.params
+
+# The solver is named after the U and T stored in the file. Postprocessing finds
+# the DMFT reference again from that name, so a file whose own name says otherwise
+# would leave the run without a reference.
+let r = parse_dmft_basename(basename(dmft_path))
+    r !== nothing && (r.U_str, r.T_str) != (string(U), string(T)) &&
+        @warn "DMFT file name disagrees with its params; the solver is named after the params" file = basename(dmft_path) U T
+end
 
 @mainprintf("=== PHS Hubbard model ===\n")
 @mainprintf("  T     = %-8.4f  U  = %-8.4f  μ  = %-8.4f  t1 = %.4f\n", T, U, μ, t1)

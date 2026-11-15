@@ -131,41 +131,43 @@ function bare_chi_local(; T, μ, t1, t2, t3, nk = 48)
 end
 
 """
-    dmft_temperature(U) -> Float64
+    dmft_temperature(U, T = dmft_T(U)) -> Float64
 
-Temperature T from the DMFT file for interaction `U`. Reads only T, not the
-whole file.
+Temperature T stored in the DMFT file at `(U, T)`. Reads only T, not the whole
+file. `T` (as spelled in the file name) can be left out when there is one DMFT
+input at U.
 """
-function dmft_temperature(U)
-    f = dmft_file(U)
+function dmft_temperature(U, T = dmft_T(U))
+    f = dmft_file(U, T)
     isfile(f) || error("DMFT reference data not found:\n  $f")
     return h5read(f, "params/T")
 end
 
 """
-    dmft_hopping(U) -> Float64
+    dmft_hopping(U, T = dmft_T(U)) -> Float64
 
-Nearest-neighbour hopping |t1| from the DMFT file for interaction `U`. The
-figures give U and T in units of it (U/t, T/t). The file stores t1 as a negative
-number, so this returns its absolute value.
+Nearest-neighbour hopping |t1| from the DMFT file at `(U, T)`. The figures give
+U and T in units of it (U/t, T/t). The file stores t1 as a negative number, so
+this returns its absolute value.
 """
-function dmft_hopping(U)
-    f = dmft_file(U)
+function dmft_hopping(U, T = dmft_T(U))
+    f = dmft_file(U, T)
     isfile(f) || error("DMFT reference data not found:\n  $f")
     return abs(Float64(h5read(f, "params/t1")))
 end
 
 """
-    dmft_model_params(Us) -> NamedTuple or nothing
+    dmft_model_params(Us; T = nothing) -> NamedTuple or nothing
 
 Model parameters (T, μ, t1, t2, t3) from the first DMFT file found for the
-values in `Us`. They are the same in every file. Returns `nothing` if no file
-exists.
+values in `Us` (at temperature `T`, if given). μ and the hoppings are the same
+in every file. Returns `nothing` if no file exists.
 """
-function dmft_model_params(Us)
-    for U in Us
-        f = dmft_file(U)
-        isfile(f) || continue
+function dmft_model_params(Us; T = nothing)
+    us = Set(_num.(Us))
+    for r in scan_dmft()
+        r.U in us && (T === nothing || r.T == _num(T)) || continue
+        f = dmft_file(r.U_str, r.T_str)
         p = h5open(f) do fh
             Dict(k => read(fh["params"][k]) for k in keys(fh["params"]))
         end
@@ -180,15 +182,16 @@ end
 # -----------------------------------------------------------------------------
 
 """
-    scan_available(nmax, nq, NL_method) -> Dict{String, Set{Tuple{Symbol,Symbol}}}
+    scan_available(nmax, nq, NL_method; T = nothing) -> Dict{String, Set{Tuple{Symbol,Symbol}}}
 
-Which runs exist for the given `nmax`, `nq` and `NL_method`, as
-`U => {(strategy, iteration_scheme)}` (U as a string, as in the file name).
+Which runs exist for the given `nmax`, `nq` and `NL_method` (and temperature `T`,
+if given), as `U => {(strategy, iteration_scheme)}` (U as a string, as in the
+file name). Without `T`, runs at different T but the same U are merged.
 
 Looks for both cache files and saved solvers, since a solver file is often
 deleted once its cache exists.
 """
-function scan_available(nmax, nq, NL_method)
+function scan_available(nmax, nq, NL_method; T = nothing)
     available = Dict{String, Set{Tuple{Symbol, Symbol}}}()
     dirs = (postprocess_dir(), solver_dir())
     for dir in dirs
@@ -197,6 +200,7 @@ function scan_available(nmax, nq, NL_method)
             r = parse_run_basename(f)
             r === nothing && continue
             (r.nmax == nmax && r.nq == nq && r.NL == NL_method) || continue
+            (T === nothing || r.T == _num(T)) || continue
             (r.strategy === nothing || r.iteration_scheme === nothing) && continue
             push!(get!(available, r.U_str, Set{Tuple{Symbol, Symbol}}()),
                   (r.strategy, r.iteration_scheme))

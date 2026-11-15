@@ -148,24 +148,78 @@ postprocess_path(a::Vararg{Any,7}) = joinpath(postprocess_dir(), run_basename(a.
 # DMFT reference input
 # -----------------------------------------------------------------------------
 
-"Path of the DMFT input file for interaction `U`."
-dmft_file(U) = joinpath(data_dir(), "high_temperature_U$(U).h5")
-
-# Pattern that matches DMFT file names and picks out U.
-const DMFT_FILE_RE =r"^high_temperature_U([0-9]*\.?[0-9]+)\.h5$"
+# One file per DMFT solution, `data/dmft_U<U>_T<T>.h5`. U and T are spelled as
+# `string` writes the `params/U`, `params/T` stored inside, which is also how
+# `run_hubbard_model.jl` spells them in the solver name. So a DMFT input, the
+# solver grown from it and its precompute cache all share one (U, T) pair.
 
 """
-    scan_dmft_U() -> Vector{String}
+    dmft_basename(U, T) -> String
+    dmft_file(U, T)     -> String
 
-All U values that have a `data/high_temperature_U<U>.h5` file, sorted from
-smallest to largest. Returned as strings, written as in the file name.
+File name / full path of the DMFT input at interaction `U` and temperature `T`.
 """
-function scan_dmft_U()
-    d = data_dir()
-    isdir(d) || return String[]
-    us = String[m.captures[1] for m in (match(DMFT_FILE_RE, f) for f in readdir(d)) if m !== nothing]
-    return sort!(unique!(us); by = u -> parse(Float64, u))
+dmft_basename(U, T) = "dmft_U$(U)_T$(T).h5"
+dmft_file(U, T)     = joinpath(data_dir(), dmft_basename(U, T))
+
+"""
+Pattern that matches file names made by `dmft_basename`, and picks out `(U, T)`
+as strings. If you change `dmft_basename`, change this too.
+"""
+const DMFT_FILE_RE = r"^dmft_U([0-9]*\.?[0-9]+)_T([0-9]*\.?[0-9]+)\.h5$"
+
+"""
+    parse_dmft_basename(name) -> NamedTuple or nothing
+
+Read `(U, T)` back from a DMFT file name (the reverse of [`dmft_basename`](@ref)),
+as strings spelled as in the name and as numbers. Returns `nothing` if `name` is
+not a DMFT file name.
+"""
+function parse_dmft_basename(name)
+    m = match(DMFT_FILE_RE, name)
+    m === nothing && return nothing
+    return (; file = name, U_str = m.captures[1], T_str = m.captures[2],
+              U = parse(Float64, m.captures[1]), T = parse(Float64, m.captures[2]))
 end
+
+"""
+    scan_dmft() -> Vector{NamedTuple}
+
+Every DMFT input in `data/`, as [`parse_dmft_basename`](@ref) reads it, sorted
+by U and then T.
+"""
+function scan_dmft()
+    d = data_dir()
+    isdir(d) || return NamedTuple[]
+    runs = [r for r in (parse_dmft_basename(f) for f in readdir(d)) if r !== nothing]
+    return sort!(runs; by = r -> (r.U, r.T))
+end
+
+"""
+    scan_dmft_U(T) -> Vector{String}
+
+All U with a DMFT input at temperature `T`, sorted from smallest to largest.
+Returned as strings, written as in the file name.
+"""
+scan_dmft_U(T) = String[r.U_str for r in scan_dmft() if r.T == _num(T)]
+
+"""
+    dmft_T(U) -> String
+
+Temperature of the DMFT input at interaction `U`, as written in its file name,
+for callers that know only U. Errors if there is no input at U, or more than
+one (a temperature scan at fixed U): then T has to be given.
+"""
+function dmft_T(U)
+    Ts = String[r.T_str for r in scan_dmft() if r.U == _num(U)]
+    length(Ts) == 1 && return only(Ts)
+    isempty(Ts) && error("No DMFT input for U = $U in\n  $(data_dir())")
+    error("There are DMFT inputs for U = $U at several temperatures, so T has to " *
+          "be given. Available T: $(join(Ts, ", ")).")
+end
+
+# A value that may be given as a string (as spelled in a file name) or a number.
+_num(x) = x isa AbstractString ? parse(Float64, x) : Float64(x)
 
 # -----------------------------------------------------------------------------
 # AIM susceptibility scan (calculate_susceptibilities.jl -> plot_susceptibilities.jl)

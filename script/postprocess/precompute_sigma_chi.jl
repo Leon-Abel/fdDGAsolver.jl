@@ -35,7 +35,10 @@ Usage (from the repo root):
 
 Run with `--help` for the full option list.
 
-  --U            interaction strength, as spelled in the DMFT file name (required)
+  --U            interaction strength, as spelled in the file names (required)
+  --T            temperature, as spelled in the file names. Needed only when there
+                 are DMFT inputs at several T for this U (a temperature scan such
+                 as data/dmft_U5.0_T<T>.h5); otherwise the one T on disk is used.
   --nmax --nq --NL   the box the run was solved on
   --strategies   comma-separated scPA | fdPA      (default: both)
   --schemes      comma-separated anderson | mfRG  (default: both)
@@ -48,6 +51,7 @@ explicit warning instead.
 
   julia --project=script script/postprocess/precompute_sigma_chi.jl --U=2.9 --nmax=12 --nq=6
   julia --project=script script/postprocess/precompute_sigma_chi.jl --U=2.9 --strategies=fdPA --force
+  julia --project=script script/postprocess/precompute_sigma_chi.jl --U=5.0 --T=0.25
 
 Can also be `include`d to use `precompute(...)` directly. The cache path it
 writes comes from `postprocess_path(...)` in `common/paths.jl`.
@@ -72,14 +76,14 @@ include(joinpath(@__DIR__, "post_process.jl"))        # chi_K1_all, chi_{D,M}_fr
 # -----------------------------------------------------------------------
 # Cache location, run naming and the DMFT reference all come from
 # common/paths.jl: `postprocess_path` gives the cache for one run, and
-# `dmft_file` / `dmft_temperature` address the reference input.
+# `dmft_file(U, T)` the reference input it was grown from.
 # -----------------------------------------------------------------------
 
 """
     split_U(U) -> (U_str, U_num)
 
-The two forms of an interaction strength: the string that NAMES its files, and
-the number the physics is done with (χ ~ 1/U²).
+The two forms of an interaction strength (or a temperature): the string that
+NAMES its files, and the number the physics is done with (χ ~ 1/U²).
 
 Every caller here takes U out of a file name and must put it back unchanged — a
 run saved as `U2.10` is not the run `U2.1` names — while `precompute` also has to
@@ -89,17 +93,30 @@ apart: pass the string and both forms are exact.
 split_U(U) = U isa AbstractString ? (U, parse(Float64, U)) : (string(U), float(U))
 
 """
-    dmft_reference(U) -> (; T, Σ_DMFT_ν0, chi_D_DMFT, chi_M_DMFT)
+    split_UT(U, T = nothing) -> (U_str, U_num, T_str, T_num)
+
+[`split_U`](@ref) for both labels of a run. `T = nothing` stands for the one
+temperature with a DMFT input at U (see `dmft_T`), so it can be left out unless
+U has inputs at several temperatures.
+"""
+function split_UT(U, T = nothing)
+    U_str, U_num = split_U(U)
+    T_str, T_num = split_U(T === nothing ? dmft_T(U_str) : T)
+    return U_str, U_num, T_str, T_num
+end
+
+"""
+    dmft_reference(U; T = nothing) -> (; T, Σ_DMFT_ν0, chi_D_DMFT, chi_M_DMFT)
 
 Load the DMFT reference and return the local self-energy at ν = iπT and the local
 density / magnetic susceptibilities at ω = 0, alongside the reference temperature T.
 
-`U` is taken as spelled (see [`split_U`](@ref)): the string picks the file, the
-number divides into χ.
+`U` and `T` are taken as spelled (see [`split_UT`](@ref)): the strings pick the
+file, the number U divides into χ.
 """
-function dmft_reference(U)
-    U_str, U_num = split_U(U)
-    dfile = dmft_file(U_str)
+function dmft_reference(U; T = nothing)
+    U_str, U_num, T_str, _ = split_UT(U, T)
+    dfile = dmft_file(U_str, T_str)
     isfile(dfile) || error("DMFT reference data not found:\n  $dfile")
     data_triqs = load_triqs_data(dfile)
     T  = data_triqs.params.T
@@ -118,7 +135,7 @@ end
 # Precompute
 # -----------------------------------------------------------------------
 """
-    precompute(U, nmax, nq, NL_method, strategy, iteration_scheme; force = false)
+    precompute(U, nmax, nq, NL_method, strategy, iteration_scheme; T = nothing, force = false)
         -> path
 
 Load the converged solver for one `(strategy, iteration_scheme)` run, evaluate Σ
@@ -126,40 +143,40 @@ and χ_{D,M} on the dense k-grid, and write both the raw full-physical quantitie
 and their tilde differences to the DMFT reference into the run's cache. When the
 cache already exists the (slow) solver load is skipped unless `force = true`.
 
-Pass `U` as the string it is spelled with in the file names; a number is accepted
-and stringified, which is exact for every U currently on disk but not a property
-to rely on (see [`split_U`](@ref)).
+Pass `U` and `T` as the strings they are spelled with in the file names; a number
+is accepted and stringified, which is exact for every value currently on disk but
+not a property to rely on (see [`split_U`](@ref)). `T` can be left out when U has
+a DMFT input at one temperature only.
 
 Returns the cache path.
 """
-function precompute(U, nmax, nq, NL_method, strategy, iteration_scheme; force = false)
-    # The name of every file touched below is built from `U_str`, never from the
-    # number — including the solver this reads and the DMFT reference it subtracts.
-    U_str, U_num = split_U(U)
-    # Naming the cache needs only T, and `dmft_temperature` reads just that one
-    # field — so an already-cached run never touches the (large) local vertex.
-    T     = dmft_temperature(U_str)
-    path  = postprocess_path(U_str, T, nmax, nq, NL_method, strategy, iteration_scheme)
+function precompute(U, nmax, nq, NL_method, strategy, iteration_scheme; T = nothing, force = false)
+    # The name of every file touched below is built from `U_str` and `T_str`, never
+    # from the numbers — including the solver this reads and the DMFT reference it
+    # subtracts. Finding them opens no file, so an already-cached run never touches
+    # the (large) local vertex.
+    U_str, U_num, T_str, T_num = split_UT(U, T)
+    path  = postprocess_path(U_str, T_str, nmax, nq, NL_method, strategy, iteration_scheme)
     tag   = "$(ALGO_FAMILY[strategy])_$(iteration_scheme)"   # for messages only
 
     if !force && isfile(path)
-        mpi_ismain() && println("Cache present for $(tag), U=$(U_str); nothing to do.")
+        mpi_ismain() && println("Cache present for $(tag), U=$(U_str), T=$(T_str); nothing to do.")
         return path
     end
 
-    mpi_ismain() && @printf "Precomputing %s data for U = %s (T = %s) …\n" tag U_str T
+    mpi_ismain() && @printf "Precomputing %s data for U = %s, T = %s …\n" tag U_str T_str
 
     # Full DMFT payload — needed from here on for the tilde differences, and handed
     # to the loader below, which would otherwise read the same file a second time.
-    data_triqs = load_triqs_data(dmft_file(U_str))
+    data_triqs = load_triqs_data(dmft_file(U_str, T_str))
 
     # Load the converged solver.
-    S = load_hubbard_solver(U_str, T, nmax, nq, NL_method, strategy, iteration_scheme; data_triqs)
+    S = load_hubbard_solver(U_str, T_str, nmax, nq, NL_method, strategy, iteration_scheme; data_triqs)
 
     # Convergence verdict recorded with the solver (run_hubbard_model.jl /
     # save_convergence!), copied into the cache below so the plot scripts can
     # filter without the solver file.
-    conv = load_convergence(U_str, T, nmax, nq, NL_method, strategy, iteration_scheme)
+    conv = load_convergence(U_str, T_str, nmax, nq, NL_method, strategy, iteration_scheme)
 
     mν_G = meshes(S.Σ, Val(1))     # ν-mesh (G, Σ)
     mk_G = meshes(S.Σ, Val(2))     # dense k-mesh (G, Σ)
@@ -215,7 +232,7 @@ function precompute(U, nmax, nq, NL_method, strategy, iteration_scheme; force = 
         tmp = path * ".part"
         h5open(tmp, "w") do f
             f["params/U"]         = U_num     # numeric; `params/U_str` names the files
-            f["params/T"]         = T
+            f["params/T"]         = T_num
             f["params/nmax"]      = nmax
             f["params/nq"]        = nq
             f["params/NL_method"] = NL_method
@@ -258,14 +275,18 @@ if abspath(PROGRAM_FILE) == @__FILE__
     nmax       = 10   # half-box size for the vertex grids
     nq         = 4    # linear k-grid size for the vertex mesh
     NL_method  = 1    # vertex momentum structure: 1 (K2(k,q)≈K2(q) ...
+    T          = ""   # temperature, as spelled in the file names (empty: the one T at U)
     strategies = ""   # comma-separated scPA | fdPA (empty: both)
     schemes    = ""   # comma-separated anderson | mfRG (empty: both)
 
     settings = cli_settings(
         "Precompute and cache the self-energy and susceptibilities for saved solver runs.")
     add_arg_table!(settings,
-        ["--U"], Dict(:help => "interaction strength, as spelled in the DMFT file name",
-                      :arg_type => String, :required => true))
+        ["--U"], Dict(:help => "interaction strength, as spelled in the file names",
+                      :arg_type => String, :required => true),
+        ["--T"], Dict(:help => "temperature, as spelled in the file names; needed only " *
+                               "when there are DMFT inputs at several T for this U",
+                      :arg_type => String, :default => T))
     add_box_args!(settings; nmax, nq, NL_method)
     add_arg_table!(settings,
         ["--strategies"], Dict(:help => "comma-separated scPA | fdPA (default: both)",
@@ -294,9 +315,9 @@ if abspath(PROGRAM_FILE) == @__FILE__
     runs = [(s, i) for s in something(named_strategies, STRATEGIES)
                    for i in something(named_schemes,    ITERATION_SCHEMES)]
 
-    # `U` stays the string it is spelled with — that is what names the files.
-    # `precompute` splits off the number it needs for the arithmetic itself.
-    T = dmft_temperature(U)
+    # `U` and `T` stay the strings they are spelled with — that is what names the
+    # files. `precompute` splits off the numbers it needs for the arithmetic itself.
+    T = isempty(parsed["T"]) ? dmft_T(U) : parsed["T"]
 
     for (strategy, iteration_scheme) in runs
         tag = "$(ALGO_FAMILY[strategy])_$(iteration_scheme)"
@@ -317,7 +338,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         end
 
         try
-            precompute(U, nmax, nq, NL_method, strategy, iteration_scheme; force)
+            precompute(U, nmax, nq, NL_method, strategy, iteration_scheme; T, force)
         catch err
             # A sweep should survive one bad run, but not swallow Ctrl-C — without
             # this an interrupt is logged as a failure and the sweep marches on.

@@ -19,7 +19,7 @@ begin
     # for U in [2.0875, 2.0885, 2.089, 2.0895, 2.8, 2.825, 2.85, 2.875, 2.9]
         # Load impurity vertex
         prefix = "/home/ucl/modl/jmlihm/MFjl/data/beta2.0_t-0.25_U$(U)_mu$(U/2)_numc1_numk256"
-        filename_output = "/home/ucl/modl/jmlihm/MFjl/fdDGAsolver.jl/data/high_temperature_U$U.h5"
+        filename_output = "/home/ucl/modl/jmlihm/MFjl/fdDGAsolver.jl/data/dmft_U$(U)_T$(T).h5"
         data_triqs = fdDGAsolver.parse_triqs_data(prefix, T, U; params = (; μ, t1, t2, t3), half_filling = true, symmetrize = true, filename_output)
         # plot_vertex_K1(Γ)
         # plot_vertex_K2(Γ; vmax = 0.01)

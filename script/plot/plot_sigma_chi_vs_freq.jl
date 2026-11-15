@@ -41,7 +41,8 @@ That block is also where the command line takes its defaults from, so the two
 entry points cannot drift apart.
 
   --U            interaction, as spelled in the DMFT file name
-                 (T is fixed by U via that reference)
+  --T            temperature, as spelled in the DMFT file name; needed only when
+                 there are DMFT inputs at several T for this U
   --nmax --nq    vertex box half-size and coarse k-grid size
   --nls          comma-separated NL methods to draw: 1 | 2 | 3
   --strategies   comma-separated scPA | fdPA
@@ -66,7 +67,8 @@ include(joinpath(@__DIR__, "..", "postprocess", "precompute_sigma_chi.jl"))   # 
 # are the defaults `--help` reports, so the two entry points cannot drift apart.
 # ---------------------------------------------------------------------------
 U          = "3.0"              # as spelled in the DMFT file name
-nmax       = 10                 # vertex box half-size
+T          = ""                 # as spelled in the DMFT file name ("": the one T at U)
+nmax     = 10                 # vertex box half-size
 nq         = 4                  # coarse k-grid size
 nls        = "1"                # NL methods to draw: "1" | "1,2" | "1,2,3"
 strategies = "fdPA"             # "fdPA" | "scPA" | both
@@ -85,6 +87,9 @@ if abspath(PROGRAM_FILE) == @__FILE__
     add_arg_table!(settings,
         ["--U"],  Dict(:help => "interaction strength, as spelled in the DMFT file name",
                        :arg_type => String,  :default => U),
+        ["--T"],  Dict(:help => "temperature, as spelled in the DMFT file name " *
+                                "(default: the one T with an input at U)",
+                       :arg_type => String,  :default => T),
         ["--nls"], Dict(:help => "comma-separated NL methods to draw: 1 | 2 | 3",
                        :arg_type => String,  :default => nls),
         ["--strategies"], Dict(:help => "comma-separated scPA | fdPA",
@@ -103,6 +108,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     parsed = parse_args(ARGS, settings)
 
     U          = parsed["U"]
+    T          = parsed["T"]
     nmax       = parsed["nmax"]
     nq         = parsed["nq"]
     nls        = parsed["nls"]
@@ -121,7 +127,7 @@ nl_style    = Dict(1 => :solid, 2 => :dash, 3 => :dot)
 nl_name     = Dict(1 => "K23 s-wave", 2 => "K3 s-wave", 3 => "full q")
 
 """
-    load_data(; U, nmax, nq, nls, strategies, schemes, tilde) -> NamedTuple
+    load_data(; U, T, nmax, nq, nls, strategies, schemes, tilde) -> NamedTuple
 
 Read the caches and assemble every curve the figure draws. Each keyword defaults to
 the parameter block above, so `load_data()` loads exactly what executing this file
@@ -129,6 +135,7 @@ would. The momentum is deliberately NOT one of them: it only indexes the dense
 k-grid, so `plot_data` can move it without this running again.
 """
 function load_data(; U          = U,
+                     T          = T,
                      nmax       = nmax,
                      nq         = nq,
                      nls        = nls,
@@ -149,12 +156,13 @@ function load_data(; U          = U,
     # value for the arithmetic (axis labels, χ ~ 1/U² inside `precompute`).
     U_num = parse(Float64, U)
 
-    # T is fixed by U via the DMFT reference; used so the cache filenames match.
-    T = dmft_temperature(U)
+    # T as spelled in the file names (the one T at U when left empty), and its value.
+    T_str = isempty(string(T)) ? dmft_T(U) : string(T)
+    T     = dmft_temperature(U, T_str)
 
     # The unit the U and T axes are quoted in, read off the same reference rather
     # than written into the title as a bare factor of 4.
-    t = dmft_hopping(U)
+    t = dmft_hopping(U, T_str)
 
     multi_nl     = length(nls_sel)     > 1
     multi_scheme = length(schemes_sel) > 1
@@ -168,13 +176,13 @@ function load_data(; U          = U,
     # `file` is kept so the DMFT curve below can read the other mode from it.
     function load_all(strategy, scheme, NL_method)
         run_tag = "$(ALGO_FAMILY[strategy])_$(scheme)"
-        file    = postprocess_path(U, T, nmax, nq, NL_method, strategy, scheme)
+        file    = postprocess_path(U, T_str, nmax, nq, NL_method, strategy, scheme)
 
         if !isfile(file)
             try
                 # U goes over as the string it names the files with; `precompute`
                 # splits off the number it needs for the arithmetic (χ ~ 1/U²).
-                precompute(U, nmax, nq, NL_method, strategy, scheme)
+                precompute(U, nmax, nq, NL_method, strategy, scheme; T = T_str)
             catch err
                 @warn "Could not obtain $(run_tag)/NL$(NL_method) data; skipping it." exception = err
                 return nothing

@@ -12,7 +12,7 @@ which makes this the script to run after anything that changes what `precompute`
 computes or stores; `--keep-existing` turns that off and fills in only what is
 missing, which is how an interrupted batch is resumed.
 
-Each run is launched in a fresh Julia process, as `run_all_high_temperature.jl` does:
+Each run is launched in a fresh Julia process, as `run_all_dmft.jl` does:
 one saved solver is several hundred MB on disk and a multiple of that once loaded, so
 sweeping dozens of them inside a single process would pile up heap that no GC pause is
 obliged to hand back. A failing run is reported but does not abort the batch.
@@ -94,44 +94,25 @@ for f in readdir(solvers)
         continue
     end
 
-    # `U_str` keeps U exactly as the file name spells it; `U` is the number, used
-    # only for ordering. Rebuilding the name from the number would turn a run
-    # saved as `U2.10` into a lookup for `U2.1`.
-    push!(runs, (; r.file, r.U, r.U_str, r.T, r.nmax, r.nq, r.NL,
+    # `U_str` / `T_str` keep U and T exactly as the file name spells them; `U`, `T`
+    # are the numbers, used only for ordering. Rebuilding the name from the number
+    # would turn a run saved as `U2.10` into a lookup for `U2.1`.
+    push!(runs, (; r.file, r.U, r.U_str, r.T, r.T_str, r.nmax, r.nq, r.NL,
                    strategy = r.strategy, scheme = r.iteration_scheme))
 end
 
 isempty(runs) && error("No solver files matching hubbard_*.h5 found in\n  $solvers")
 
-# `precompute_sigma_chi.jl` takes no T — it reads T back from the DMFT file for U —
-# so two solver files differing only in their T address the very same child run. Keep
-# one per address and name the collisions, rather than spending a second long run on
-# a file the child was never going to open.
-address(r) = (r.U, r.nmax, r.nq, r.NL, r.strategy, r.scheme)
+# Runs of one box size stay together, ascending in U and then T, so the log reads in
+# the order the plots are made from.
+sort!(runs; by = r -> (r.nmax, r.nq, r.NL, String(r.strategy), String(r.scheme), r.U, r.T))
 
-kept       = Dict{Tuple, NamedTuple}()
-duplicates = Tuple{String, String}[]   # (file not run, file run in its place)
-
-for r in runs
-    a = address(r)
-    if haskey(kept, a)
-        push!(duplicates, (r.file, kept[a].file))
-    else
-        kept[a] = r
-    end
-end
-
-# Runs of one box size stay together, ascending in U, so the log reads in the order
-# the plots are made from.
-runs = sort!(collect(values(kept));
-             by = r -> (r.nmax, r.nq, r.NL, String(r.strategy), String(r.scheme), r.U))
-
-# `precompute` takes its reference from data/high_temperature_U<U>.h5, with U as the
-# solver file name spells it — the same name `dmft_file(r.U_str)` builds here. A
-# solver grown from any other DMFT input (Wu_point, weak_coupling) has no reference
-# to subtract and cannot be precomputed at all — report those instead of launching
-# a child that is certain to fail on the missing file.
-has_dmft(r) = isfile(dmft_file(r.U_str))
+# `precompute` takes its reference from data/dmft_U<U>_T<T>.h5, with U and T as the
+# solver file name spells them — the same name `dmft_file(r.U_str, r.T_str)` builds
+# here. A solver grown from any other DMFT input (Wu_point, weak_coupling) has no
+# reference to subtract and cannot be precomputed at all — report those instead of
+# launching a child that is certain to fail on the missing file.
+has_dmft(r) = isfile(dmft_file(r.U_str, r.T_str))
 no_dmft     = filter(!has_dmft, runs)
 runs        = filter(has_dmft, runs)
 
@@ -153,15 +134,8 @@ if !isempty(cached)
 end
 
 if !isempty(no_dmft)
-    println("\nNo DMFT reference data/high_temperature_U<U>.h5, skipped ($(length(no_dmft))):")
+    println("\nNo DMFT reference data/dmft_U<U>_T<T>.h5, skipped ($(length(no_dmft))):")
     foreach(r -> println("  - $(r.file)"), no_dmft)
-end
-
-if !isempty(duplicates)
-    println("\nSame run under a different T, skipped ($(length(duplicates))):")
-    for (dup, orig) in duplicates
-        println("  - $dup (covered by $orig)")
-    end
 end
 
 if !isempty(unreadable)
@@ -191,10 +165,10 @@ println()
 for (i, r) in enumerate(runs)
     println("[$i/$(length(runs))] === $(r.file) ===")
 
-    # U goes over as the string the file name spells it with: that is what the
-    # child rebuilds both the DMFT file name and the solver file name from.
+    # U and T go over as the strings the file name spells them with: that is what
+    # the child rebuilds both the DMFT file name and the solver file name from.
     # `--force` unless the caller asked to keep what is already there.
-    args = child_args(; U = r.U_str, nmax = r.nmax, nq = r.nq, NL_method = r.NL,
+    args = child_args(; U = r.U_str, T = r.T_str, nmax = r.nmax, nq = r.nq, NL_method = r.NL,
                         strategies = r.strategy, schemes = r.scheme,
                         force = !keep_existing)
     try

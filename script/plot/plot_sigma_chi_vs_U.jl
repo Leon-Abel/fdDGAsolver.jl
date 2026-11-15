@@ -33,7 +33,7 @@ reference is momentum-, scheme- and NL-independent, so it is drawn once regardle
 of how many are selected (gray, dash-dotted), and is only meaningful in raw mode.
 
 The U values are discovered by scanning `output/` for saved solvers / caches on
-the requested (nmax, nq, NL) grid. For each U the quantities are read from the
+the requested (nmax, nq, NL) grid at the temperature T of the scan. For each U the quantities are read from the
 precomputed caches written by `precompute_sigma_chi.jl`; any missing cache is
 generated on first use (the only step that reloads a solver).
 
@@ -46,6 +46,7 @@ Usage (from the repo root):
 Run with `--help` for the full option list and the current defaults. Every option
 is named, so order never matters and only what you change needs to be passed.
 
+  --T            temperature of the U scan, as spelled in the file names
   --nls          comma-separated NL methods to draw: 1 | 2 | 3
   --strategies   comma-separated scPA | fdPA (empty for a DMFT-only figure)
   --schemes      comma-separated anderson | mfRG
@@ -83,6 +84,7 @@ include(joinpath(@__DIR__, "..", "postprocess", "precompute_sigma_chi.jl"))   # 
 # Running the file as a script overrides them from the command line - and these
 # are the defaults `--help` reports, so the two entry points cannot drift apart.
 # ---------------------------------------------------------------------------
+T          = "0.5"            # temperature of the U scan, as spelled in the file names
 nls        = "1"          # comma-separated NL methods to draw: 1 | 2 | 3
 strategies = "fdPA"           # comma-separated scPA | fdPA (empty for a DMFT-only figure)
 schemes    = "mfRG"  # comma-separated anderson | mfRG
@@ -102,6 +104,8 @@ no_dmft    = false            # omit the DMFT reference curve
 if abspath(PROGRAM_FILE) == @__FILE__
     settings = cli_settings("Plot Σ and χ versus U at a fixed momentum.")
     add_arg_table!(settings,
+        ["--T"],   Dict(:help => "temperature of the U scan, as spelled in the file names",
+                       :arg_type => String, :default => T),
         ["--nls"], Dict(:help => "comma-separated NL methods to draw: 1 | 2 | 3",
                        :arg_type => String, :default => nls),
         ["--strategies"], Dict(:help => "comma-separated scPA | fdPA (empty for a DMFT-only figure)",
@@ -122,6 +126,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
     parsed = parse_args(ARGS, settings)
 
+    T          = parsed["T"]
     nls        = parsed["nls"]
     strategies = parsed["strategies"]
     schemes    = parsed["schemes"]
@@ -170,6 +175,7 @@ nl_style    = Dict(
 # panel! uses. Absent files / a q not on the path silently skip.
 qmc_U_str = "2.089"                                 # as the DMFT file name spells it
 qmc_U    = parse(Float64, qmc_U_str)                # U/t = qmc_U/t = 8.356
+qmc_T    = 0.5                                      # the one temperature it was run at
 qmc_sign = -1                                       # Re Σ sign flip vs the solver
 qmc_dir  = data_dir()
 
@@ -194,7 +200,7 @@ function qmc_point(fname, vcol, ecol, qx_pi, qy_pi; sub = 0.0, sgn = 1)
 end
 
 """
-    load_data(; nls, strategies, schemes, qx, qy, Umin, Umax, resmax, nmax, nq,
+    load_data(; T, nls, strategies, schemes, qx, qy, Umin, Umax, resmax, nmax, nq,
                 tilde, no_dmft) -> NamedTuple
 
 Discover the U on disk, read the caches at the fixed momentum (generating any that
@@ -202,7 +208,8 @@ are missing), the DMFT reference and the detQMC point, and assemble every curve 
 figure draws. Each keyword defaults to the parameter block above, so `load_data()`
 loads exactly what executing this file would.
 """
-function load_data(; nls        = nls,
+function load_data(; T          = T,
+                     nls        = nls,
                      strategies = strategies,
                      schemes    = schemes,
                      qx         = qx,
@@ -215,6 +222,7 @@ function load_data(; nls        = nls,
                      tilde      = tilde,
                      no_dmft    = no_dmft)
 
+    T_scan      = string(T)   # as spelled in the file names, like U
     qx_pi       = qx
     qy_pi       = qy
     nls_sel     = parse_nls(nls)
@@ -251,16 +259,16 @@ function load_data(; nls        = nls,
     # the bare-bubble block and `dmft_model_params` all come from
     # common/plotting.jl.
 
-    avail = Dict(nl => scan_available(nmax, nq, nl) for nl in nls_sel)   # NL => (U => runs)
+    avail = Dict(nl => scan_available(nmax, nq, nl; T = T_scan) for nl in nls_sel)   # NL => (U => runs)
 
     # The U axis: every U appearing for a selected NL, plus (when DMFT is drawn) every
-    # U with a DMFT reference file, restricted to the window. U stays the string it is
-    # spelled with, since that is what names the files.
+    # U with a DMFT reference file at this T, restricted to the window. U stays the
+    # string it is spelled with, since that is what names the files.
     Us = windowed_U(avail, nls_sel; Umin, Umax,
-                    extra = show_dmft ? scan_dmft_U() : String[])
+                    extra = show_dmft ? scan_dmft_U(T_scan) : String[])
     isempty(Us) && error(
         "No cached / solver / DMFT data for nmax=$nmax nq=$nq NL=$(join(nls_sel, ",")) " *
-        "in U ∈ [$Umin, $Umax] under\n  $(output_dir())")
+        "at T=$T_scan in U ∈ [$Umin, $Umax] under\n  $(output_dir())")
 
     window = isfinite(Umin) || isfinite(Umax) ? " in U ∈ [$Umin, $Umax]" : ""
     println("Sources: ", join(strategy_label.(strats_sel), ", "),
@@ -280,7 +288,7 @@ function load_data(; nls        = nls,
     # momentum-local DMFT curve takes the q-averaged bubble χ₀,loc/2.
     # `bare_chi_q`, `bare_chi_local` and `dmft_model_params` live in
     # common/plotting.jl.
-    _mp        = dmft_model_params(Us)
+    _mp        = dmft_model_params(Us; T = T_scan)
     # The unit the U and T axes are quoted in. Read off the reference files rather
     # than written here as `t = 0.25`: `dmft_model_params` has already loaded them,
     # and a constant is only right for as long as every input agrees with it. (t1 is
@@ -331,14 +339,14 @@ function load_data(; nls        = nls,
         for U in Ulist
             (strategy, scheme) in available[U] || continue   # this run not available at this U
 
-            T     = dmft_temperature(U)
-            file = postprocess_path(U, T, nmax, nq, NL_method, strategy, scheme)
+            Tf   = dmft_temperature(U, T_scan)
+            file = postprocess_path(U, T_scan, nmax, nq, NL_method, strategy, scheme)
             if !isfile(file)
                 try
-                    # U goes over as the string it was discovered as: that is what names
-                    # both the cache being written and the solver being read. `precompute`
-                    # splits off the number it needs for the arithmetic (χ ~ 1/U²) itself.
-                    precompute(U, nmax, nq, NL_method, strategy, scheme)
+                    # U and T go over as the strings they were discovered as: that is what
+                    # names both the cache being written and the solver being read.
+                    # `precompute` splits off the numbers it needs for the arithmetic itself.
+                    precompute(U, nmax, nq, NL_method, strategy, scheme; T = T_scan)
                 catch err
                     @warn "Could not obtain $(run_tag)/NL$(NL_method) data for U=$U; skipping it." exception = err
                     continue
@@ -360,7 +368,7 @@ function load_data(; nls        = nls,
             # (ν = iπT / Ω = 0, q) element is pulled, not the whole (nν × nk²) matrix.
             Σ, χ = h5open(file, "r") do f
                 idx = k_index(qx_pi, qy_pi, read(f, "params/nk"))
-                iν  = nu0_row(read(f, "sigma/nu"), T)
+                iν  = nu0_row(read(f, "sigma/nu"), Tf)
                 iΩ  = omega0_row(read(f, "chi/omega"))
                 ((Re = f["sigma/$(tag)/re"][iν, idx], Im = f["sigma/$(tag)/im"][iν, idx]),
                  (D  = f["chi/$(tag)/D"][iΩ, idx],    M  = f["chi/$(tag)/M"][iΩ, idx]))
@@ -389,7 +397,7 @@ function load_data(; nls        = nls,
             try
                 # As spelled: `dmft_reference` picks the file with the string and does its
                 # arithmetic (…/U²) with the number it parses out of it.
-                ref = dmft_reference(U)
+                ref = dmft_reference(U; T = T_scan)
                 push!(us,  Uf)
                 # Same sign convention as precompute's raw Σ (S.Σ stores im·Σ_phys).
                 push!(ReΣ,  imag(ref.Σ_DMFT_ν0))
@@ -441,11 +449,11 @@ function load_data(; nls        = nls,
 
     # detQMC point at the fixed q (see the block above `load_data`).
     qmc = Dict{Symbol, Any}()
-    if Umin <= qmc_U <= Umax
+    if Umin <= qmc_U <= Umax && parse(Float64, T_scan) == qmc_T
         # DMFT subtractions apply only in tilde mode (raw mode uses the values as-is).
         subRe = subIm = subD = subM = 0.0
         if tilde
-            dref  = dmft_reference(qmc_U_str)
+            dref  = dmft_reference(qmc_U_str; T = T_scan)
             subRe = imag(dref.Σ_DMFT_ν0)                # ≡ 0 at PHS
             subIm = -real(dref.Σ_DMFT_ν0)
             subD  = dref.chi_D_DMFT
@@ -463,16 +471,8 @@ function load_data(; nls        = nls,
         isempty(qmc) || println("detQMC L16 point at U/t = $(qmc_U/t), q = $(q_label(qx_pi, qy_pi))\n")
     end
 
-    # U is the abscissa, so only T goes in the title; all U share the same T via the
-    # DMFT reference. Taken from the first U that has one.
-    Tref = nothing
-    for u in Us
-        try
-            Tref = dmft_temperature(u)
-            break
-        catch
-        end
-    end
+    # U is the abscissa, so only T goes in the title.
+    Tref = parse(Float64, T_scan)
 
     return (; curves, dmft_data, has_dmft, qmc, t, Tref, Us, tag, tilde, show_dmft,
               qx_pi, qy_pi, Umin, Umax, resmax, nmax, nq,

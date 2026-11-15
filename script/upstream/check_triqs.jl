@@ -13,7 +13,7 @@ using fdDGAsolver: kSW
 include("/home/ucl/modl/jmlihm/MFjl/fdDGAsolver.jl/script/plot_vertex.jl")
 
 begin
-    filename = "/home/ucl/modl/jmlihm/MFjl/fdDGAsolver.jl/data/high_temperature_U2.089.h5"
+    filename = "/home/ucl/modl/jmlihm/MFjl/fdDGAsolver.jl/data/dmft_U2.089_T0.5.h5"
     filename = "/home/ucl/modl/jmlihm/MFjl/fdDGAsolver.jl/data/Wu_point_U6.2.h5"
     filename = "/home/ucl/modl/jmlihm/MFjl/fdDGAsolver.jl/data/Wu_point_U6.0.h5"
     filename = "/home/ucl/modl/jmlihm/MFjl/fdDGAsolver.jl/data/Wu_point_U5.8.h5"
